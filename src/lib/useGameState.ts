@@ -47,7 +47,7 @@ export function useGameState() {
       creatorId: userId,
       step: 3,
       gameMode: 'team',
-      difficulty: 'easy',
+      difficulty: 'medium',
       players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
       teamNames: ['קבוצה 1', 'קבוצה 2'],
       timeBanks: { 'קבוצה 1': 20, 'קבוצה 2': 20 },
@@ -63,6 +63,50 @@ export function useGameState() {
 
   const handleJoinRoom = async (code: string, name: string) => {
     const roomRef = ref(db, `rooms/${code}`);
+    
+    // בדיקה אם זה חדר ה-QA המיוחד "עומר"
+    if (code === 'עומר') {
+      const snapshot = await get(roomRef);
+      if (!snapshot.exists()) {
+        const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
+        const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+        const bots = botNames.map((bn, i) => ({
+          id: `bot-${i}`,
+          name: bn,
+          teamIdx: (i + 1) % 2, // פיצול לקבוצות
+          color: botColors[i],
+          isBot: true
+        }));
+
+        const qaData = {
+          id: 'עומר',
+          creatorId: 'qa-admin',
+          step: 3,
+          gameMode: 'team',
+          difficulty: 'medium',
+          players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+          teamNames: ['קבוצה 1', 'קבוצה 2'],
+          timeBanks: { 'קבוצה 1': 60, 'קבוצה 2': 60 },
+          currentQuestionIdx: 0,
+          votes: {},
+          status: 'waiting'
+        };
+        await set(roomRef, qaData);
+      } else {
+        // אם החדר קיים, רק נוודא שהמשתמש בפנים
+        const data = snapshot.val();
+        const players = data.players || [];
+        if (!players.find((p: any) => p.id === userId)) {
+          players.push({ id: userId, name, teamIdx: 0, color: '#3b82f6' });
+          await update(roomRef, { players });
+        }
+      }
+      setRoomId('עומר');
+      localStorage.setItem('trivia_user_name', name);
+      return true;
+    }
+
+    // לוגיקת הצטרפות רגילה
     const snapshot = await get(roomRef);
     if (snapshot.exists()) {
       const data = snapshot.val();
@@ -80,36 +124,21 @@ export function useGameState() {
     return false;
   };
 
-  // לוגיקת עדכון זמן וניקוד לפי האפיון (סעיף 3) [cite: 16, 22]
   const handleAnswer = async (isCorrect: boolean) => {
     if (!roomData || !roomId) return;
-
     const isIndividual = roomData.gameMode === 'individual';
     const me = roomData.players.find((p: any) => p.id === userId);
     const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
     
-    // קביעת ערכי הבונוס/קנס לפי סעיפים 18, 19, 25, 26 באפיון 
-    let timeChange = 0;
-    if (isIndividual) {
-      timeChange = isCorrect ? 5 : -2;
-    } else {
-      timeChange = isCorrect ? 10 : -7;
-    }
-
+    let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
     const newTime = (roomData.timeBanks[key] || 0) + timeChange;
     const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
 
-    // בדיקת יעדי ניצחון (60 לסולו, 120 לקבוצתי) 
     const target = isIndividual ? 60 : 120;
     if (newTime >= target) {
       updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
     } else {
-      updateRoom({ 
-        timeBanks: newTimeBanks, 
-        step: 6, // מעבר למסך חשיפה 
-        lastCorrect: isCorrect,
-        votes: {} // איפוס הצבעות
-      });
+      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: {} });
     }
   };
 

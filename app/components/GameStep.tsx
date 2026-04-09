@@ -1,12 +1,11 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 
-// רכיב פנימי לשעון הספורטאים
 const AthleteClock = ({ timeLeft, maxTime }: { timeLeft: number, maxTime: number }) => {
   const radius = 70;
   const circumference = 2 * Math.PI * radius;
   const progress = (timeLeft / maxTime) * circumference;
-  const handRotation = (timeLeft % 60) * 6; // מחוג שניות אדום
+  const handRotation = (timeLeft % 60) * 6;
 
   return (
     <div style={{ position: 'relative', width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -22,9 +21,7 @@ const AthleteClock = ({ timeLeft, maxTime }: { timeLeft: number, maxTime: number
           style={{ transition: 'stroke-dashoffset 0.5s linear' }}
           transform="rotate(-90 80 80)"
         />
-        <line 
-          x1="80" y1="80" x2="80" y2="20" 
-          stroke="#ef4444" strokeWidth="3" strokeLinecap="round"
+        <line x1="80" y1="80" x2="80" y2="20" stroke="#ef4444" strokeWidth="3" strokeLinecap="round"
           style={{ transform: `rotate(${handRotation}deg)`, transformOrigin: '80px 80px', transition: 'transform 1s linear' }} 
         />
       </svg>
@@ -38,22 +35,49 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   const myTeamIdx = me?.teamIdx || 0;
   const [localTime, setLocalTime] = useState(roomData.gameMode === 'individual' ? 10 : 20);
 
-  // נתוני השאלה
   const question = {
     text: "איזו מדינה תארח את המונדיאל בשנת 2026?",
     options: ["קטר", "ברזיל", "ארה\"ב, קנדה ומקסיקו", "צרפת"],
     correctIdx: 2
   };
 
-  // ערבול תשובות לכל קבוצה בנפרד (Anti-Cheat)
   const shuffledOptions = useMemo(() => {
     return question.options.map((opt, i) => ({ text: opt, originalIdx: i }))
       .sort(() => Math.random() - 0.5);
   }, [roomData.currentQuestionIdx]);
 
-  // לוגיקת הסכמה קבוצתית - תיקון הגדרת p: any
   const teamVotes = roomData.votes?.[myTeamIdx] || {};
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === myTeamIdx);
+  
+  // לוגיקת בוטים - הצבעה אוטומטית בחדר QA
+  useEffect(() => {
+    if (roomData.id === 'עומר' || roomData.players.some((p: any) => p.isBot)) {
+      const bots = roomData.players.filter((p: any) => p.isBot);
+      const newVotes = { ...roomData.votes };
+      let changed = false;
+
+      bots.forEach((bot: any) => {
+        const botTeamIdx = bot.teamIdx;
+        if (!newVotes[botTeamIdx]) newVotes[botTeamIdx] = {};
+        
+        if (botTeamIdx === myTeamIdx && teamVotes[userId] !== undefined) {
+          if (newVotes[botTeamIdx][bot.id] !== teamVotes[userId]) {
+            newVotes[botTeamIdx][bot.id] = teamVotes[userId];
+            changed = true;
+          }
+        } 
+        else if (botTeamIdx !== myTeamIdx && newVotes[botTeamIdx][bot.id] === undefined) {
+          newVotes[botTeamIdx][bot.id] = Math.floor(Math.random() * 4);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        updateRoom({ votes: newVotes });
+      }
+    }
+  }, [teamVotes[userId], roomData.votes, roomData.id]);
+
   const everyoneAgreed = myTeamPlayers.length > 0 && 
     myTeamPlayers.every((p: any) => teamVotes[p.id] !== undefined && teamVotes[p.id] === teamVotes[myTeamPlayers[0].id]);
 
@@ -83,7 +107,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
       <div style={s.grid}>
         {shuffledOptions.map((opt) => {
-          // תיקון הגדרת p: any במסננים
           const voters = myTeamPlayers.filter((p: any) => teamVotes[p.id] === opt.originalIdx);
           const isSelectedByMe = teamVotes[userId] === opt.originalIdx;
           
@@ -95,7 +118,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
             }}>
               {opt.text}
               <div style={s.voterDots}>
-                {/* תיקון הגדרת p: any במפה */}
                 {voters.map((p: any) => <div key={p.id} style={{...s.dot, backgroundColor: p.color}} />)}
               </div>
             </button>
