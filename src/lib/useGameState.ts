@@ -55,13 +55,16 @@ export function useGameState() {
       status: 'waiting'
     };
     await set(ref(db, `rooms/${newRoomId}`), initialData);
+    localStorage.setItem('trivia_user_name', name);
     setRoomId(newRoomId);
+    setStep(3); // מעבר מיידי
   };
 
   const handleJoinRoom = async (code: string, name: string) => {
     const cleanCode = code.trim();
     const roomRef = ref(db, `rooms/${cleanCode}`);
     
+    // לוגיקת חדר QA "עומר"
     if (cleanCode === 'עומר') {
       const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
       const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
@@ -87,6 +90,7 @@ export function useGameState() {
         status: 'waiting'
       };
       await set(roomRef, qaData);
+      localStorage.setItem('trivia_user_name', name);
       setRoomId('עומר');
       setStep(3);
       return true;
@@ -102,7 +106,9 @@ export function useGameState() {
         players.push({ id: userId, name, teamIdx: players.length % 2, color: playerColor });
         await update(roomRef, { players });
       }
+      localStorage.setItem('trivia_user_name', name);
       setRoomId(cleanCode);
+      setStep(data.step || 3);
       return true;
     }
     return false;

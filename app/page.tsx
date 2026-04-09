@@ -38,12 +38,52 @@ export default function TriviaApp() {
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden' }}>
       {step === 1 && <RulesStep onStart={() => setStep(2)} />}
-      {step === 2 && <EntryStep onJoin={handleJoinRoom} onCreate={handleCreateRoom} onSetName={setUserName} />}
-      {step === 3 && roomData && <SetupStep roomData={roomData} userId={userId} updateRoom={updateRoom} onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} />}
+      
+      {step === 2 && (
+        <EntryStep 
+          onJoin={handleJoinRoom} 
+          onCreate={handleCreateRoom} 
+          onSetName={setUserName} 
+        />
+      )}
+
+      {step === 3 && (
+        !roomData ? (
+          <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
+        ) : (
+          <SetupStep 
+            roomData={roomData} 
+            userId={userId} 
+            updateRoom={updateRoom} 
+            onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
+          />
+        )
+      )}
+
       {step === 4 && <CountdownStep timer={roomData?.preGameTimer || 3} />}
-      {step === 5 && roomData && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} />}
-      {step === 6 && roomData && <ScoreStep roomData={roomData} onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} />}
-      {step === 7 && roomData && <VictoryStep winnerName={roomData.winnerName} onRestart={restartGame} />}
+      
+      {step === 5 && roomData && (
+        <GameStep 
+          roomData={roomData} 
+          userId={userId} 
+          updateRoom={updateRoom} 
+          handleAnswer={handleAnswer} 
+        />
+      )}
+
+      {step === 6 && roomData && (
+        <ScoreStep 
+          roomData={roomData} 
+          onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} 
+        />
+      )}
+
+      {step === 7 && roomData && (
+        <VictoryStep 
+          winnerName={roomData.winnerName} 
+          onRestart={restartGame} 
+        />
+      )}
     </main>
   );
 }
