@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Trivia Time Challenge ⏱️",
   description: "האתגר שיוכיח מי באמת יודע הכל ויכול לנצח את השעון - משחק טריוויה קבוצתי ואישי!",
-  manifest: "/manifest.json", // הקישור לקובץ המניפסט של האפליקציה
+  manifest: "/manifest.json", 
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -31,7 +31,6 @@ export const metadata: Metadata = {
   },
 };
 
-// הגדרות Viewport בנפרד (תקני לגרסאות Next.js החדשות)
 export const viewport: Viewport = {
   themeColor: "#05081c",
   width: "device-width",
@@ -51,9 +50,12 @@ export default function RootLayout({
       <body style={{ 
         margin: 0, 
         padding: 0, 
+        // חסימת בחירת טקסט וסימון
         userSelect: 'none', 
         WebkitUserSelect: 'none',
         msUserSelect: 'none',
+        MozUserSelect: 'none',
+        // מניעת פעולות מגע ברירת מחדל (זום וכדומה)
         touchAction: 'manipulation',
         overflow: 'hidden',
         backgroundColor: '#05081c',

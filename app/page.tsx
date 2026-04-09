@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 import { useGameState } from "../src/lib/useGameState"; 
 import RulesStep from "./components/RulesStep"; 
 import EntryStep from "./components/EntryStep";
@@ -13,6 +14,34 @@ export default function TriviaApp() {
     mounted, userId, roomId, roomData, step, setStep, updateRoom,
     handleCreateRoom, handleJoinRoom, setUserName 
   } = useGameState();
+
+  const wakeLockRef = useRef<any>(null);
+
+  // מניעת החשכת מסך (Wake Lock)
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.log("Wake Lock request failed");
+      }
+    };
+
+    if (mounted) {
+      requestWakeLock();
+    }
+
+    // שחרור הנעילה בעת סגירה
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().then(() => {
+          wakeLockRef.current = null;
+        });
+      }
+    };
+  }, [mounted]);
 
   if (!mounted) return null;
 
@@ -56,6 +85,8 @@ export default function TriviaApp() {
           onNext={() => setStep(5)}
         />
       )}
+      
+      {/* שלב הניצחון במידה והתנאים מתקיימים יתווסף כאן בלוגיקה עתידית */}
     </main>
   );
 }
