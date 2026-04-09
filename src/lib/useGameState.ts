@@ -22,7 +22,6 @@ export function useGameState() {
     setUserName(savedName);
   }, []);
 
-  // סנכרון מול Firebase
   useEffect(() => {
     if (!roomId) return;
     const roomRef = ref(db, `rooms/${roomId}`);
@@ -46,12 +45,14 @@ export function useGameState() {
     const initialData = {
       id: newRoomId,
       creatorId: userId,
-      step: 3, // עוברים ישר ללובי/הגדרות
+      step: 3,
       gameMode: 'team',
       difficulty: 'easy',
       players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
       teamNames: ['קבוצה 1', 'קבוצה 2'],
       timeBanks: { 'קבוצה 1': 20, 'קבוצה 2': 20 },
+      currentQuestionIdx: 0,
+      votes: {},
       status: 'waiting',
       createdAt: Date.now()
     };
@@ -69,7 +70,7 @@ export function useGameState() {
       if (!players.find((p: any) => p.id === userId)) {
         const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         const playerColor = colors[players.length % colors.length];
-        players.push({ id: userId, name, teamIdx: 1, color: playerColor });
+        players.push({ id: userId, name, teamIdx: players.length % 2, color: playerColor });
         await update(roomRef, { players });
       }
       setRoomId(code);
@@ -79,9 +80,42 @@ export function useGameState() {
     return false;
   };
 
+  // לוגיקת עדכון זמן וניקוד לפי האפיון (סעיף 3) [cite: 16, 22]
+  const handleAnswer = async (isCorrect: boolean) => {
+    if (!roomData || !roomId) return;
+
+    const isIndividual = roomData.gameMode === 'individual';
+    const me = roomData.players.find((p: any) => p.id === userId);
+    const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
+    
+    // קביעת ערכי הבונוס/קנס לפי סעיפים 18, 19, 25, 26 באפיון 
+    let timeChange = 0;
+    if (isIndividual) {
+      timeChange = isCorrect ? 5 : -2;
+    } else {
+      timeChange = isCorrect ? 10 : -7;
+    }
+
+    const newTime = (roomData.timeBanks[key] || 0) + timeChange;
+    const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
+
+    // בדיקת יעדי ניצחון (60 לסולו, 120 לקבוצתי) 
+    const target = isIndividual ? 60 : 120;
+    if (newTime >= target) {
+      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
+    } else {
+      updateRoom({ 
+        timeBanks: newTimeBanks, 
+        step: 6, // מעבר למסך חשיפה 
+        lastCorrect: isCorrect,
+        votes: {} // איפוס הצבעות
+      });
+    }
+  };
+
   return {
     mounted, userId, roomId, roomData, step,
     setStep: (s: number) => { setStep(s); if(roomId) updateRoom({ step: s }); },
-    updateRoom, handleCreateRoom, handleJoinRoom, setUserName, userName
+    updateRoom, handleCreateRoom, handleJoinRoom, setUserName, userName, handleAnswer
   };
 }
