@@ -48,94 +48,62 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
   const teamVotes = roomData.votes?.[myTeamIdx] || {};
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === myTeamIdx);
-  
-  // לוגיקת בוטים - הצבעה אוטומטית בחדר QA
+
   useEffect(() => {
-    if (roomData.id === 'עומר' || roomData.players.some((p: any) => p.isBot)) {
+    if (roomData.id === 'עומר') {
       const bots = roomData.players.filter((p: any) => p.isBot);
       const newVotes = { ...roomData.votes };
       let changed = false;
-
       bots.forEach((bot: any) => {
-        const botTeamIdx = bot.teamIdx;
-        if (!newVotes[botTeamIdx]) newVotes[botTeamIdx] = {};
-        
-        if (botTeamIdx === myTeamIdx && teamVotes[userId] !== undefined) {
-          if (newVotes[botTeamIdx][bot.id] !== teamVotes[userId]) {
-            newVotes[botTeamIdx][bot.id] = teamVotes[userId];
+        if (!newVotes[bot.teamIdx]) newVotes[bot.teamIdx] = {};
+        if (bot.teamIdx === myTeamIdx && teamVotes[userId] !== undefined) {
+          if (newVotes[bot.teamIdx][bot.id] !== teamVotes[userId]) {
+            newVotes[bot.teamIdx][bot.id] = teamVotes[userId];
             changed = true;
           }
-        } 
-        else if (botTeamIdx !== myTeamIdx && newVotes[botTeamIdx][bot.id] === undefined) {
-          newVotes[botTeamIdx][bot.id] = Math.floor(Math.random() * 4);
+        } else if (bot.teamIdx !== myTeamIdx && newVotes[bot.teamIdx][bot.id] === undefined) {
+          newVotes[bot.teamIdx][bot.id] = Math.floor(Math.random() * 4);
           changed = true;
         }
       });
-
-      if (changed) {
-        updateRoom({ votes: newVotes });
-      }
+      if (changed) updateRoom({ votes: newVotes });
     }
   }, [teamVotes[userId], roomData.votes, roomData.id]);
 
   const everyoneAgreed = myTeamPlayers.length > 0 && 
     myTeamPlayers.every((p: any) => teamVotes[p.id] !== undefined && teamVotes[p.id] === teamVotes[myTeamPlayers[0].id]);
 
-  const handleVote = (idx: number) => {
-    const newVotes = { ...roomData.votes };
-    if (!newVotes[myTeamIdx]) newVotes[myTeamIdx] = {};
-    newVotes[myTeamIdx][userId] = idx;
-    updateRoom({ votes: newVotes });
-  };
-
   useEffect(() => {
-    const timer = setInterval(() => {
-      setLocalTime(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    const timer = setInterval(() => setLocalTime(p => (p > 0 ? p - 1 : 0)), 1000);
     return () => clearInterval(timer);
   }, []);
 
   return (
     <div style={s.layout}>
-      <div style={s.topBar}>
-        <AthleteClock timeLeft={localTime} maxTime={roomData.gameMode === 'individual' ? 60 : 120} />
-      </div>
-
-      <div style={s.questionCard}>
-        <h2 style={s.questionText}>{question.text}</h2>
-      </div>
-
+      <div style={s.topBar}><AthleteClock timeLeft={localTime} maxTime={roomData.gameMode === 'individual' ? 60 : 120} /></div>
+      <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
       <div style={s.grid}>
         {shuffledOptions.map((opt) => {
           const voters = myTeamPlayers.filter((p: any) => teamVotes[p.id] === opt.originalIdx);
-          const isSelectedByMe = teamVotes[userId] === opt.originalIdx;
-          
           return (
-            <button key={opt.originalIdx} onClick={() => handleVote(opt.originalIdx)} style={{
+            <button key={opt.originalIdx} onClick={() => {
+              const newVotes = { ...roomData.votes };
+              if (!newVotes[myTeamIdx]) newVotes[myTeamIdx] = {};
+              newVotes[myTeamIdx][userId] = opt.originalIdx;
+              updateRoom({ votes: newVotes });
+            }} style={{
               ...s.optionBtn,
               border: voters.length > 0 ? `3px dashed ${voters[0].color}` : '2px solid rgba(255,255,255,0.1)',
-              backgroundColor: isSelectedByMe ? 'rgba(255,215,0,0.1)' : '#1a1d2e'
+              backgroundColor: teamVotes[userId] === opt.originalIdx ? 'rgba(255,215,0,0.1)' : '#1a1d2e'
             }}>
               {opt.text}
-              <div style={s.voterDots}>
-                {voters.map((p: any) => <div key={p.id} style={{...s.dot, backgroundColor: p.color}} />)}
-              </div>
+              <div style={s.voterDots}>{voters.map((p: any) => <div key={p.id} style={{...s.dot, backgroundColor: p.color}} />)}</div>
             </button>
           );
         })}
       </div>
-
-      <div style={s.powerUps}>
-        <button style={s.powerBtn}>❄️ הקפאה</button>
-        <button style={s.powerBtn}>🌓 50:50</button>
-        <button style={s.powerBtn}>🐢 האטה</button>
-      </div>
-
-      <button 
-        disabled={!everyoneAgreed}
-        onClick={() => handleAnswer(teamVotes[userId] === question.correctIdx)}
-        style={{...s.finalBtn, backgroundColor: everyoneAgreed ? '#10b981' : '#334155'}}
-      >
+      <button disabled={!everyoneAgreed} onClick={() => handleAnswer(teamVotes[userId] === question.correctIdx)}
+        style={{...s.finalBtn, backgroundColor: everyoneAgreed ? '#10b981' : '#334155'}}>
         {everyoneAgreed ? "סופי! ✅" : "מחכים להסכמה..."}
       </button>
     </div>
@@ -148,10 +116,8 @@ const s: any = {
   questionCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '30px', padding: '30px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
   questionText: { fontSize: '1.8rem', fontWeight: 'bold', margin: 0 },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', flex: 1 },
-  optionBtn: { position: 'relative', borderRadius: '20px', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' },
+  optionBtn: { position: 'relative', borderRadius: '20px', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' },
   voterDots: { position: 'absolute', bottom: '10px', display: 'flex', gap: '5px' },
   dot: { width: '10px', height: '10px', borderRadius: '50%' },
-  powerUps: { display: 'flex', gap: '10px' },
-  powerBtn: { flex: 1, height: '50px', borderRadius: '15px', backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '1rem' },
   finalBtn: { height: '70px', borderRadius: '25px', border: 'none', color: 'white', fontSize: '1.5rem', fontWeight: '900', cursor: 'pointer' }
 };

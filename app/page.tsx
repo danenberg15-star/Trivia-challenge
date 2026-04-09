@@ -12,33 +12,23 @@ import VictoryStep from "./components/VictoryStep";
 export default function TriviaApp() {
   const { 
     mounted, userId, roomId, roomData, step, setStep, updateRoom,
-    handleCreateRoom, handleJoinRoom, setUserName 
+    handleCreateRoom, handleJoinRoom, setUserName, handleAnswer, restartGame
   } = useGameState();
 
   const wakeLockRef = useRef<any>(null);
 
-  // מניעת החשכת מסך (Wake Lock)
   useEffect(() => {
     const requestWakeLock = async () => {
       try {
         if ('wakeLock' in navigator) {
           wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
         }
-      } catch (err) {
-        console.log("Wake Lock request failed");
-      }
+      } catch (err) { console.log("Wake Lock request failed"); }
     };
-
-    if (mounted) {
-      requestWakeLock();
-    }
-
-    // שחרור הנעילה בעת סגירה
+    if (mounted) requestWakeLock();
     return () => {
       if (wakeLockRef.current) {
-        wakeLockRef.current.release().then(() => {
-          wakeLockRef.current = null;
-        });
+        wakeLockRef.current.release().then(() => { wakeLockRef.current = null; });
       }
     };
   }, [mounted]);
@@ -48,45 +38,12 @@ export default function TriviaApp() {
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden' }}>
       {step === 1 && <RulesStep onStart={() => setStep(2)} />}
-      
-      {step === 2 && (
-        <EntryStep 
-          onJoin={handleJoinRoom} 
-          onCreate={handleCreateRoom}
-          onSetName={setUserName}
-        />
-      )}
-
-      {step === 3 && roomData && (
-        <SetupStep 
-          roomData={roomData} 
-          userId={userId} 
-          updateRoom={updateRoom} 
-          onStart={() => {
-            updateRoom({ step: 4, preGameTimer: 3 });
-          }} 
-        />
-      )}
-
+      {step === 2 && <EntryStep onJoin={handleJoinRoom} onCreate={handleCreateRoom} onSetName={setUserName} />}
+      {step === 3 && roomData && <SetupStep roomData={roomData} userId={userId} updateRoom={updateRoom} onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} />}
       {step === 4 && <CountdownStep timer={roomData?.preGameTimer || 3} />}
-
-      {step === 5 && roomData && (
-        <GameStep 
-          roomData={roomData}
-          userId={userId}
-          updateRoom={updateRoom}
-          onFinishQuestion={() => setStep(6)}
-        />
-      )}
-
-      {step === 6 && roomData && (
-        <ScoreStep 
-          roomData={roomData}
-          onNext={() => setStep(5)}
-        />
-      )}
-      
-      {/* שלב הניצחון במידה והתנאים מתקיימים יתווסף כאן בלוגיקה עתידית */}
+      {step === 5 && roomData && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} />}
+      {step === 6 && roomData && <ScoreStep roomData={roomData} onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} />}
+      {step === 7 && roomData && <VictoryStep winnerName={roomData.winnerName} onRestart={restartGame} />}
     </main>
   );
 }
