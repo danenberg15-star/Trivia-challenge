@@ -1,105 +1,94 @@
 "use client";
+import React, { useMemo } from "react";
+import Confetti from 'react-confetti';
+import useWindowSize from '../hooks/useWindowSize';
 
-import React from "react";
-
-interface VictoryStepProps {
-  winnerName: string;
-  onRestart: () => void;
+interface Props {
+  roomData: any;
+  userId: string;
+  restartGame: () => void;
 }
 
-export default function VictoryStep({ winnerName, onRestart }: VictoryStepProps) {
-  return (
-    <div style={{
-      flex: 1, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      width: '100vw', 
-      height: '100dvh', 
-      backgroundColor: '#f8fafc', // רקע בהיר וחגיגי
-      direction: 'rtl', 
-      boxSizing: 'border-box',
-      position: 'relative',
-      overflow: 'hidden',
-      padding: '20px'
-    }}>
-      {/* אנימציית קונפטי */}
-      <div className="confetti-container">
-        <style>{`
-          .confetti-container { position: absolute; width: 100%; height: 100%; overflow: hidden; pointer-events: none; top: 0; left: 0; z-index: 1; }
-          .confetti { position: absolute; width: 12px; height: 12px; animation: fall 4s linear infinite; opacity: 0.9; }
-          @keyframes fall { 
-            0% { transform: translateY(-10vh) rotate(0deg); } 
-            100% { transform: translateY(110vh) rotate(720deg); } 
-          }
-        `}</style>
-        {[...Array(50)].map((_, i) => {
-          // צבעים מגוונים לקונפטי
-          const colors = ['#ffd700', '#ff5e5e', '#5eff8a', '#5ebcff', '#b85eff'];
-          const color = colors[i % colors.length];
-          return (
-            <div 
-              key={i} 
-              className="confetti" 
-              style={{ 
-                left: `${Math.random() * 100}%`, 
-                animationDelay: `${Math.random() * 4}s`, 
-                backgroundColor: color,
-                borderRadius: i % 3 === 0 ? '50%' : '0' // שילוב של עיגולים וריבועים
-              }} 
-            />
-          );
-        })}
-      </div>
-      
-      {/* תוכן מרכזי */}
-      <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center', marginTop: '-10vh' }}>
-        {/* גביע עם אנימציית קפיצה קלה */}
-        <div style={{ fontSize: '120px', filter: 'drop-shadow(0px 10px 10px rgba(0,0,0,0.1))', animation: 'bounce 2s infinite' }}>
-          <style>{`
-            @keyframes bounce {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-15px); }
-            }
-          `}</style>
-          🏆
-        </div>
-        
-        <h1 style={{ color: '#05081c', fontSize: '2.2rem', fontWeight: '900', margin: '0', lineHeight: '1.2' }}>
-          כל הכבוד על הניצחון שלכם!
-        </h1>
-        
-        <div style={{ 
-          backgroundColor: '#ffd700', 
-          padding: '15px 40px', 
-          borderRadius: '20px', 
-          boxShadow: '0 8px 25px rgba(255, 215, 0, 0.4)',
-          marginTop: '10px'
-        }}>
-          <h2 style={{ color: '#05081c', fontSize: '2.5rem', fontWeight: '900', margin: '0' }}>
-            {winnerName}
-          </h2>
-        </div>
-      </div>
+export default function VictoryStep({ roomData, userId, restartGame }: Props) {
+  const { width, height } = useWindowSize();
+  const isIndividual = roomData.gameMode === 'individual';
 
-      {/* כפתור תחתון */}
-      <div style={{ zIndex: 10, position: 'absolute', bottom: '30px', width: '100%', padding: '0 20px', boxSizing: 'border-box' }}>
-         <button onClick={onRestart} style={{
-            width: '100%', 
-            minHeight: '60px', 
-            borderRadius: '18px', 
-            backgroundColor: '#05081c', 
-            color: '#ffd700', 
-            fontWeight: '900', 
-            border: 'none', 
-            fontSize: '1.4rem', 
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
-         }}>
-           משחק חדש 🔄
-         </button>
+  const winners = useMemo(() => {
+    if (isIndividual) {
+      const sorted = [...roomData.players].sort((a: any, b: any) => {
+        const scoreA = roomData.timeBanks[a.name] || 0;
+        const scoreB = roomData.timeBanks[b.name] || 0;
+        return scoreB - scoreA;
+      });
+      return [sorted[0]];
+    } else {
+      const sortedTeams = roomData.teamNames.map((name: string, idx: number) => ({
+        name,
+        time: roomData.timeBanks[name] || 0,
+        players: roomData.players.filter((p: any) => p.teamIdx === idx)
+      })).sort((a: any, b: any) => b.time - a.time);
+      
+      return [sortedTeams[0]];
+    }
+  }, [roomData, isIndividual]);
+
+  const winnerName = isIndividual ? winners[0]?.name : winners[0]?.name;
+  const winnerTime = isIndividual ? roomData.timeBanks[winnerName] : winners[0]?.time;
+
+  return (
+    <div style={s.layout}>
+      <Confetti width={width} height={height} numberOfPieces={300} recycle={false} colors={['#ffd700', '#ef4444', '#3b82f6', '#10b981']} />
+      
+      <div style={s.container}>
+        <div style={s.crown}>👑</div>
+        <h1 style={s.title}>יש לנו מנצח!</h1>
+        
+        <div style={s.winnerText}>
+          {winnerName}
+        </div>
+        
+        <div style={s.scoreBox}>
+          <div style={s.scoreLabel}>עם בנק שניות סופי של:</div>
+          <div style={s.scoreNumber}>{Math.max(0, winnerTime)}</div>
+          <div style={s.scoreSuffix}>שניות</div>
+        </div>
+
+        {!isIndividual && winners[0]?.players && (
+          <div style={s.teamPlayers}>
+            <div style={s.label}>חברי הקבוצה המנצחת:</div>
+            <div style={s.playersList}>
+              {winners[0].players.map((p: any) => (
+                <div key={p.id} style={{...s.playerItem, border: `2px solid ${p.color}`}}>
+                  <div style={{...s.dot, backgroundColor: p.color}} />
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button onClick={restartGame} style={s.restartBtn}>
+          לשחק שוב? 🔄
+        </button>
       </div>
     </div>
   );
 }
+
+const s: any = {
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', overflow: 'hidden' },
+  container: { width: '100%', maxWidth: '450px', backgroundColor: '#1a1d2e', borderRadius: '40px', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.7)', border: '2px solid rgba(255, 215, 0, 0.3)', textAlign: 'center' },
+  crown: { fontSize: '5rem', marginBottom: '10px' },
+  title: { color: '#ffd700', fontSize: '2.2rem', fontWeight: '900', margin: '0 0 10px 0' },
+  winnerText: { fontSize: '3rem', fontWeight: '900', marginBottom: '20px', color: 'white' },
+  scoreBox: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '25px', padding: '20px', width: '100%', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '25px' },
+  scoreLabel: { fontSize: '1rem', opacity: 0.7, marginBottom: '5px' },
+  scoreNumber: { fontSize: '4rem', fontWeight: '900', color: '#ffd700', lineHeight: 1 },
+  scoreSuffix: { fontSize: '1.2rem', fontWeight: 'bold' },
+  teamPlayers: { width: '100%', marginBottom: '25px' },
+  label: { fontSize: '0.9rem', opacity: 0.6, marginBottom: '8px', textAlign: 'right' },
+  playersList: { display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' },
+  playerItem: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '6px 15px', borderRadius: '15px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' },
+  dot: { width: '8px', height: '8px', borderRadius: '50%' },
+  restartBtn: { width: '100%', height: '60px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '20px', fontSize: '1.4rem', fontWeight: '900', cursor: 'pointer' },
+};
