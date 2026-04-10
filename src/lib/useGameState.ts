@@ -70,38 +70,40 @@ export function useGameState() {
     const roomRef = ref(db, `rooms/${cleanCode}`);
     const snapshot = await get(roomRef);
 
+    // לוגיקה ייעודית לחדר QA - איפוס מוחלט בכל כניסה מחודשת
+    if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
+      const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+      await set(roomRef, {
+        id: cleanCode,
+        creatorId: userId,
+        step: 3, // תמיד מחזיר ל-SetupStep
+        gameMode: 'team',
+        difficulty: 'dynamic',
+        seed,
+        askedQuestions: [], // מאפס את היסטוריית השאלות כדי שאפשר יהיה לבדוק הכל מחדש
+        players: [
+          { id: userId, name, teamIdx: 0, color: '#00E5FF' },
+          { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true },
+          { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#10b981', isBot: true },
+          { id: 'bot_3', name: 'בוט דודו', teamIdx: 0, color: '#34d399', isBot: true },
+          { id: 'bot_4', name: 'בוט רוני', teamIdx: 1, color: '#FF9100', isBot: true },
+          { id: 'bot_5', name: 'בוט משה', teamIdx: 1, color: '#f59e0b', isBot: true },
+          { id: 'bot_6', name: 'בוט יוסי', teamIdx: 1, color: '#fbbf24', isBot: true },
+          { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true }
+        ],
+        teamNames: ['קבוצת QA', 'הבוטים'],
+        timeBanks: { 'קבוצת QA': 15, 'הבוטים': 15 },
+        powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
+        currentQuestionIdx: 0,
+        votes: null
+      });
+      localStorage.setItem('trivia_user_name', name);
+      setRoomId(cleanCode);
+      return true;
+    }
+
     if (!snapshot.exists()) {
-      if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
-        const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-        await set(roomRef, {
-          id: cleanCode,
-          creatorId: userId,
-          step: 3,
-          gameMode: 'team',
-          difficulty: 'dynamic',
-          seed,
-          askedQuestions: [],
-          players: [
-            { id: userId, name, teamIdx: 0, color: '#00E5FF' },
-            { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true },
-            { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#10b981', isBot: true },
-            { id: 'bot_3', name: 'בוט דודו', teamIdx: 0, color: '#34d399', isBot: true },
-            { id: 'bot_4', name: 'בוט רוני', teamIdx: 1, color: '#FF9100', isBot: true },
-            { id: 'bot_5', name: 'בוט משה', teamIdx: 1, color: '#f59e0b', isBot: true },
-            { id: 'bot_6', name: 'בוט יוסי', teamIdx: 1, color: '#fbbf24', isBot: true },
-            { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true }
-          ],
-          teamNames: ['קבוצת QA', 'הבוטים'],
-          timeBanks: { 'קבוצת QA': 15, 'הבוטים': 15 },
-          powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
-          currentQuestionIdx: 0,
-          votes: null
-        });
-        localStorage.setItem('trivia_user_name', name);
-        setRoomId(cleanCode);
-        return true;
-      }
-      return false; 
+      return false; // חדר רגיל שלא קיים יחזיר שגיאה
     }
 
     const data = snapshot.val();
