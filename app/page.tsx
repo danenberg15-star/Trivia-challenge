@@ -9,7 +9,7 @@ import GameStep from "./components/GameStep";
 import ScoreStep from "./components/ScoreStep";
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
-import LoseStep from "./components/LoseStep"; // יבוא החדש
+import LoseStep from "./components/LoseStep";
 
 export default function TriviaApp() {
   const { 
@@ -19,6 +19,39 @@ export default function TriviaApp() {
 
   const wakeLockRef = useRef<any>(null);
   const [isSoloInitiated, setIsSoloInitiated] = useState(false);
+
+  // לוגיקה לניהול צ'ק-פוינט ודילוג על מסך ניקוד במצב אישי
+  useEffect(() => {
+    if (step === 6 && roomData?.gameMode === "individual") {
+      const currentIdx = roomData.currentQuestionIdx || 0;
+      const nextIdx = currentIdx + 1;
+      const me = roomData.players.find((p: any) => p.id === userId);
+      
+      if (nextIdx > 0 && nextIdx % 5 === 0) {
+        // הגענו לשאלה 5, 10, 15 וכו' -> צ'ק-פוינט וקבלת כוח
+        const powers = ['50:50', 'freeze', 'slow-mo'];
+        const randomPower = powers[Math.floor(Math.random() * powers.length)];
+        const currentPUs = roomData.powerUps?.[me.name] || [];
+        
+        updateRoom({ 
+          step: 8, // עובר למסך ה-Checkpoint
+          currentQuestionIdx: nextIdx,
+          votes: {},
+          powerUps: { 
+            ...roomData.powerUps, 
+            [me.name]: [...currentPUs, randomPower] 
+          } 
+        });
+      } else {
+        // דילוג ישיר לשאלה הבאה ללא הצגת מסך ניקוד
+        updateRoom({ 
+          step: 5, 
+          currentQuestionIdx: nextIdx, 
+          votes: {} 
+        });
+      }
+    }
+  }, [step, roomData?.gameMode, roomData?.currentQuestionIdx, updateRoom, userId]);
 
   useEffect(() => {
     const requestWakeLock = async () => {
@@ -45,10 +78,7 @@ export default function TriviaApp() {
         <button 
           onClick={() => { setIsSoloInitiated(false); handleExit(); }} 
           style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          title="צא מהחדר"
-        >
-          ✕
-        </button>
+        >✕</button>
       )}
 
       {step === 1 && <RulesStep onStart={() => setStep(2)} />}
@@ -60,10 +90,10 @@ export default function TriviaApp() {
             if (isSolo) setIsSoloInitiated(true);
             await handleCreateRoom(name);
             updateRoom({ 
-              gameMode: isSolo ? 'individual' : 'team',
-              difficulty: diff,
-              step: isSolo ? 4 : 3,
-              preGameTimer: isSolo ? 3 : 0
+              gameMode: isSolo ? 'individual' : 'team', 
+              difficulty: diff, 
+              step: isSolo ? 4 : 3, 
+              preGameTimer: isSolo ? 3 : 0 
             });
           }} 
           onSetName={setUserName} 
@@ -74,10 +104,10 @@ export default function TriviaApp() {
         isSoloInitiated || roomData?.gameMode === "individual" ? (
           <CountdownStep 
             timer={3} 
-            onComplete={() => {
-              setIsSoloInitiated(false);
-              updateRoom({ step: 5 });
-            }}
+            onComplete={() => { 
+              setIsSoloInitiated(false); 
+              updateRoom({ step: 5 }); 
+            }} 
           />
         ) : !roomData ? (
           <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
@@ -91,12 +121,7 @@ export default function TriviaApp() {
         )
       )}
 
-      {step === 4 && (
-        <CountdownStep 
-          timer={roomData?.preGameTimer || 3} 
-          onComplete={() => updateRoom({ step: 5 })}
-        />
-      )}
+      {step === 4 && <CountdownStep timer={roomData?.preGameTimer || 3} onComplete={() => updateRoom({ step: 5 })} />}
       
       {step === 5 && roomData && (
         <GameStep 
@@ -107,6 +132,7 @@ export default function TriviaApp() {
         />
       )}
 
+      {/* מסך הניקוד - יוצג רק במצב קבוצתי בגלל הדילוג ב-useEffect למעלה */}
       {step === 6 && roomData && (
         <ScoreStep 
           roomData={roomData} 
@@ -122,14 +148,13 @@ export default function TriviaApp() {
       )}
 
       {step === 8 && roomData && (
-        <CheckpointStep
-          roomData={roomData}
-          userId={userId}
-          updateRoom={updateRoom}
+        <CheckpointStep 
+          roomData={roomData} 
+          userId={userId} 
+          updateRoom={updateRoom} 
         />
       )}
 
-      {/* שלב ההפסד החדש */}
       {step === 9 && (
         <LoseStep onRestart={() => { setIsSoloInitiated(false); restartGame(); }} />
       )}
