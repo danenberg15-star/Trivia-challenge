@@ -11,7 +11,7 @@ interface QuestionType {
 
 const ALL_QUESTIONS = questionsData as QuestionType[];
 
-export default function GameStep({ roomData, userId, updateRoom, handleAnswer }: any) {
+export default function GameStep({ roomData, userId, updateRoom, handleAnswer, onDirectStepChange }: any) {
   const isIndividual = roomData.gameMode === "individual";
   const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
@@ -19,6 +19,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 15);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [hasFailed, setHasFailed] = useState(false); // דגל למניעת כפילויות
   
   const [hiddenOptions, setHiddenOptions] = useState<number[]>([]);
   const [isFrozen, setIsFrozen] = useState(false);
@@ -27,28 +28,31 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setIsRevealing(false);
+    setHasFailed(false);
     setHiddenOptions([]);
     setIsFrozen(false);
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
-  // שעון יורד
   useEffect(() => {
-    if (timeLeft <= 0 || isRevealing || isFrozen) return;
+    if (timeLeft <= 0 || isRevealing || isFrozen || hasFailed) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
-  }, [timeLeft, isRevealing, isFrozen, isSlowMo]);
+  }, [timeLeft, isRevealing, isFrozen, isSlowMo, hasFailed]);
 
-  // זיהוי 0 בשעון והגשה אוטומטית כטעות
+  // זיהוי אגרסיבי של 0 בשעון - שולח ישירות לשלב 9
   useEffect(() => {
-    if (timeLeft <= 0 && !isRevealing) {
-      setIsRevealing(true);
-      setTimeout(() => {
+    if (timeLeft <= 0 && !hasFailed && !isRevealing) {
+      setHasFailed(true);
+      if (onDirectStepChange) {
+        onDirectStepChange(9); // הפסד כפוי
+      } else {
+        // גיבוי אם אין פונקציה ישירה
         handleAnswer(false, 0); 
-      }, 1500);
+      }
     }
-  }, [timeLeft, isRevealing, handleAnswer]);
+  }, [timeLeft, hasFailed, isRevealing, onDirectStepChange, handleAnswer]);
 
   const difficulty = roomData.difficulty || 'dynamic';
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
@@ -100,11 +104,8 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   };
 
   const handleVote = (optIdx: number) => {
-    if (isRevealing || isFrozen) return; 
+    if (isRevealing || isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
-    if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
-      myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
-    }
     updateRoom({ votes: newVotes });
   };
 
@@ -133,7 +134,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
   return (
     <div style={s.layout}>
-      
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
@@ -165,9 +165,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
         <div style={s.optionsGrid}>
           {isFrozen ? (
-            <div style={s.frozenBox}>
-              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה. התשובות יחשפו בקרוב...
-            </div>
+            <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה.</div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
@@ -177,32 +175,17 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
               let borderColor = isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)';
               
               if (isRevealing) {
-                if (i === question.correctIdx) {
-                  bgColor = 'rgba(16, 185, 129, 0.2)'; 
-                  borderColor = '#10b981';
-                } else if (isSelectedByMe) {
-                  bgColor = 'rgba(239, 68, 68, 0.2)'; 
-                  borderColor = '#ef4444';
-                }
+                if (i === question.correctIdx) { bgColor = 'rgba(16, 185, 129, 0.2)'; borderColor = '#10b981'; } 
+                else if (isSelectedByMe) { bgColor = 'rgba(239, 68, 68, 0.2)'; borderColor = '#ef4444'; }
               }
-              
-              if (hiddenOptions.includes(i)) {
-                return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }}><span style={s.optionText}>{opt}</span></div>;
-              }
+              if (hiddenOptions.includes(i)) return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }} />;
 
               return (
-                <div 
-                  key={i} 
-                  onClick={() => handleVote(i)}
-                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
-                >
+                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}>
                   <span style={s.optionText}>{opt}</span>
-                  
                   {!isIndividual && votersForThis.length > 0 && (
                     <div style={s.votersContainer}>
-                      {votersForThis.map((p: any) => (
-                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />
-                      ))}
+                      {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />)}
                     </div>
                   )}
                 </div>
@@ -213,15 +196,10 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
       </div>
 
       <div style={s.footer}>
-        <button 
-          onClick={handleSubmit} 
-          disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen}
-          style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
-        >
+        <button onClick={handleSubmit} disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen} style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}>
           {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")))}
         </button>
       </div>
-
     </div>
   );
 }

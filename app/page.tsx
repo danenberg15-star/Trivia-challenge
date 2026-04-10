@@ -26,7 +26,7 @@ export default function TriviaApp() {
 
   const wakeLockRef = useRef<any>(null);
 
-  // הנתונים הפעילים (מקומי או פיירבייס)
+  // הנתונים הפעילים
   const currentStep = isSolo ? localStep : fbStep;
   const activeData = isSolo ? localRoomData : fbRoomData;
 
@@ -41,7 +41,6 @@ export default function TriviaApp() {
 
   if (!mounted) return null;
 
-  // יצירת משחק (מקומי או רשת)
   const handleCreate = async (name: string, solo: boolean, diff: string = "dynamic") => {
     setUserName(name);
     if (solo) {
@@ -59,26 +58,24 @@ export default function TriviaApp() {
         votes: {}
       };
       setLocalRoomData(initialSoloData);
-      setLocalStep(4); // מעבר ישיר לספירה לאחור בסולו
+      setLocalStep(4);
     } else {
       setIsSolo(false);
       await handleCreateRoom(name);
     }
   };
 
-  // עדכון נתונים גנרי - תוקן כדי שיחליף מסך כשצריך
   const updateActiveRoom = (updates: any) => {
-    if (isSolo) {
-      setLocalRoomData((prev: any) => ({ ...prev, ...updates }));
-      if (updates.step !== undefined) {
-        setLocalStep(updates.step); // התיקון שמשחרר את התקיעות בצ'ק-פוינט
-      }
-    } else {
-      updateFbRoom(updates);
-    }
+    if (isSolo) setLocalRoomData((prev: any) => ({ ...prev, ...updates }));
+    else updateFbRoom(updates);
   };
 
-  // טיפול בתשובה (פיצול לוגיקה בין סולו לקבוצה)
+  // פונקציה חדשה: מעבר מסך אקטיבי ומיידי (ללא הסתמכות על useEffect)
+  const handleDirectStepChange = (newStep: number) => {
+    if (isSolo) setLocalStep(newStep);
+    else updateFbRoom({ step: newStep });
+  };
+
   const onAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
     if (isSolo) {
       const me = localRoomData.players[0];
@@ -98,26 +95,23 @@ export default function TriviaApp() {
         setLocalStep(7); // ניצחון
       } else if (newTime <= 0) {
         setLocalRoomData(updatedData);
-        setLocalStep(9); // הפסד
+        setLocalStep(9); // הפסד כפוי
       } else if (nextIdx > 0 && nextIdx % 5 === 0) {
-        // צ'ק-פוינט כל 5 שאלות
         const powers = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powers[Math.floor(Math.random() * powers.length)];
         updatedData.powerUps = { [me.name]: [...(localRoomData.powerUps[me.name] || []), randomPU] };
         updatedData.lastGrantedPowerUp = randomPU;
         setLocalRoomData(updatedData);
-        setLocalStep(8);
+        setLocalStep(8); // צ'ק פוינט
       } else {
-        // רציף - מדלג ישירות לשאלה הבאה ללא מסך ניקוד
         setLocalRoomData(updatedData);
-        setLocalStep(5);
+        setLocalStep(5); // שאלה הבאה
       }
     } else {
       handleFbAnswer(isCorrect, timeAtAnswer);
     }
   };
 
-  // יציאה ואיפוס
   const onExit = () => {
     if (isSolo) { setIsSolo(false); setLocalStep(2); setLocalRoomData(null); } 
     else { handleFbExit(); }
@@ -132,20 +126,13 @@ export default function TriviaApp() {
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
       
       {currentStep >= 3 && (
-        <button 
-          onClick={onExit} 
-          style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >✕</button>
+        <button onClick={onExit} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
       )}
 
       {currentStep === 1 && <RulesStep onStart={() => isSolo ? setLocalStep(2) : setFbStep(2)} />}
       
       {currentStep === 2 && (
-        <EntryStep 
-          onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} 
-          onCreate={handleCreate} 
-          onSetName={setUserName} 
-        />
+        <EntryStep onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} onCreate={handleCreate} onSetName={setUserName} />
       )}
 
       {currentStep === 3 && activeData && (
@@ -157,24 +144,32 @@ export default function TriviaApp() {
       )}
       
       {currentStep === 5 && activeData && (
-        <GameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} />
+        <GameStep 
+          roomData={activeData} 
+          userId={userId} 
+          updateRoom={updateActiveRoom} 
+          handleAnswer={onAnswer}
+          onDirectStepChange={handleDirectStepChange} // העברת הפונקציה הישירה
+        />
       )}
 
       {currentStep === 6 && activeData && (
         <ScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 5, currentQuestionIdx: activeData.currentQuestionIdx })} />
       )}
       
-      {currentStep === 7 && activeData && (
-        <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />
-      )}
+      {currentStep === 7 && activeData && <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />}
 
       {currentStep === 8 && activeData && (
-        <CheckpointStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} />
+        <CheckpointStep 
+          roomData={activeData} 
+          userId={userId} 
+          updateRoom={updateActiveRoom} 
+          // כאן קורית הקפיצה בחזרה למשחק (שלב 5)
+          onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} 
+        />
       )}
 
-      {currentStep === 9 && (
-        <LoseStep onRestart={onRestart} />
-      )}
+      {currentStep === 9 && <LoseStep onRestart={onRestart} />}
     </main>
   );
 }
