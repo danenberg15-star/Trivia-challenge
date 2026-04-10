@@ -48,9 +48,10 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
 
   return (
     <div style={s.layout}>
+      {/* כפתור הגביע במיקום קבוע מהלמעלה */}
       <button onClick={onViewHighscores} style={s.trophyBtn} title="טבלת שיאים">🏆</button>
       
-      {/* הלוגו עכשיו מוגדר כרספונסיבי לחלוטין ולוקח את רוחב המסך */}
+      {/* לוגו מיושר בדיוק לאותו גובה של הגביע ומקסימלי ברוחב */}
       <div style={s.logoContainer}>
         <Image 
           src="/logo.webp" 
@@ -58,7 +59,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
           width={800} 
           height={400} 
           priority 
-          style={{ width: '100%', height: 'auto', maxHeight: '35vh', objectFit: 'contain' }}
+          style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
         />
       </div>
 
@@ -89,23 +90,22 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', padding: '20px', direction: 'rtl', position: 'relative', overflowY: 'auto', boxSizing: 'border-box' },
-  trophyBtn: { position: 'absolute', top: '15px', right: '15px', fontSize: '1.8rem', background: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '50%', width: '55px', height: '55px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(255,145,0,0.2)', zIndex: 10, transition: 'transform 0.2s' },
-  // הקונטיינר של הלוגו לוקח 100% מהרוחב, עם מרווחים יחסיים (vh)
-  logoContainer: { width: '100%', maxWidth: '550px', flexShrink: 0, marginTop: '4vh', marginBottom: '2vh', display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  // הטופס הוגדר למילוי השטח הנותר (flex: 1) ופיזור אחיד
-  form: { width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: 'max(15px, 2vh)', flex: 1, justifyContent: 'center', paddingBottom: '3vh' },
-  input: { height: '55px', flexShrink: 0, borderRadius: '15px', border: '1px solid rgba(0,229,255,0.3)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.2rem', transition: 'border-color 0.2s' },
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', padding: '0 20px 20px 20px', direction: 'rtl', position: 'relative', overflowY: 'auto', boxSizing: 'border-box' },
+  trophyBtn: { position: 'absolute', top: '20px', right: '20px', fontSize: '1.8rem', background: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '50%', width: '55px', height: '55px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(255,145,0,0.2)', zIndex: 10 },
+  // יישור קו עליון לגביע עם הגדלה מקסימלית
+  logoContainer: { width: '100%', maxWidth: '650px', flexShrink: 0, marginTop: '20px', marginBottom: '1vh', display: 'flex', justifyContent: 'center', alignItems: 'center' },
+  form: { width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: 'max(12px, 1.5vh)', flex: 1, justifyContent: 'center', paddingBottom: '3vh' },
+  input: { height: '55px', flexShrink: 0, borderRadius: '15px', border: '1px solid rgba(0,229,255,0.3)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.2rem' },
   settingsBlock: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '15px', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0 },
   settingLabel: { fontSize: '0.9rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' },
   toggles: { display: 'flex', gap: '8px' },
-  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #FF9100', backgroundColor: 'transparent', color: '#FF9100', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #FF9100', backgroundColor: 'transparent', color: '#FF9100', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer' },
   toggleBtnActive: { backgroundColor: '#FF9100', color: '#05081c' },
-  soloBtn: { height: '60px', flexShrink: 0, backgroundColor: '#00E5FF', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,229,255,0.3)', transition: 'transform 0.2s' },
-  groupFrame: { border: '2px solid rgba(255,145,0,0.3)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.01)', position: 'relative', marginTop: '1vh', flexShrink: 0 },
+  soloBtn: { height: '60px', flexShrink: 0, backgroundColor: '#00E5FF', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,229,255,0.3)' },
+  groupFrame: { border: '2px solid rgba(255,145,0,0.3)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.01)', position: 'relative', marginTop: '5px', flexShrink: 0 },
   groupLabel: { position: 'absolute', top: '-12px', right: '20px', backgroundColor: '#05081c', padding: '0 10px', color: '#FF9100', fontSize: '0.9rem', fontWeight: 'bold' },
   inputSmall: { height: '45px', borderRadius: '10px', border: '1px solid rgba(255,145,0,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.1rem' },
-  primaryBtn: { height: '50px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', transition: 'transform 0.2s' },
-  secondaryBtn: { height: '45px', backgroundColor: 'transparent', color: '#FF9100', border: '2px solid #FF9100', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', transition: 'all 0.2s' },
+  primaryBtn: { height: '50px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer' },
+  secondaryBtn: { height: '45px', backgroundColor: 'transparent', color: '#FF9100', border: '2px solid #FF9100', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
   divider: { textAlign: 'center', margin: '2px 0', opacity: 0.5, fontSize: '0.8rem' }
 };
