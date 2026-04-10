@@ -19,7 +19,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 15);
   const [isRevealing, setIsRevealing] = useState(false);
-  const [hasFailed, setHasFailed] = useState(false); // דגל למניעת כפילויות
+  const [hasFailed, setHasFailed] = useState(false);
   
   const [hiddenOptions, setHiddenOptions] = useState<number[]>([]);
   const [isFrozen, setIsFrozen] = useState(false);
@@ -41,14 +41,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     return () => clearInterval(t);
   }, [timeLeft, isRevealing, isFrozen, isSlowMo, hasFailed]);
 
-  // זיהוי אגרסיבי של 0 בשעון - שולח ישירות לשלב 9
   useEffect(() => {
     if (timeLeft <= 0 && !hasFailed && !isRevealing) {
       setHasFailed(true);
       if (onDirectStepChange) {
-        onDirectStepChange(9); // הפסד כפוי
+        onDirectStepChange(9); 
       } else {
-        // גיבוי אם אין פונקציה ישירה
         handleAnswer(false, 0); 
       }
     }
@@ -106,6 +104,9 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const handleVote = (optIdx: number) => {
     if (isRevealing || isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
+    if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
+      myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
+    }
     updateRoom({ votes: newVotes });
   };
 
@@ -134,6 +135,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
   return (
     <div style={s.layout}>
+      
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
@@ -165,7 +167,9 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
         <div style={s.optionsGrid}>
           {isFrozen ? (
-            <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה.</div>
+            <div style={s.frozenBox}>
+              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה. התשובות יחשפו בקרוב...
+            </div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
@@ -175,17 +179,32 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
               let borderColor = isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)';
               
               if (isRevealing) {
-                if (i === question.correctIdx) { bgColor = 'rgba(16, 185, 129, 0.2)'; borderColor = '#10b981'; } 
-                else if (isSelectedByMe) { bgColor = 'rgba(239, 68, 68, 0.2)'; borderColor = '#ef4444'; }
+                if (i === question.correctIdx) {
+                  bgColor = 'rgba(16, 185, 129, 0.2)'; 
+                  borderColor = '#10b981';
+                } else if (isSelectedByMe) {
+                  bgColor = 'rgba(239, 68, 68, 0.2)'; 
+                  borderColor = '#ef4444';
+                }
               }
-              if (hiddenOptions.includes(i)) return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }} />;
+              
+              if (hiddenOptions.includes(i)) {
+                return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }}><span style={s.optionText}>{opt}</span></div>;
+              }
 
               return (
-                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}>
+                <div 
+                  key={i} 
+                  onClick={() => handleVote(i)}
+                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
+                >
                   <span style={s.optionText}>{opt}</span>
+                  
                   {!isIndividual && votersForThis.length > 0 && (
                     <div style={s.votersContainer}>
-                      {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />)}
+                      {votersForThis.map((p: any) => (
+                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -196,10 +215,15 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       </div>
 
       <div style={s.footer}>
-        <button onClick={handleSubmit} disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen} style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}>
+        <button 
+          onClick={handleSubmit} 
+          disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen}
+          style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
+        >
           {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")))}
         </button>
       </div>
+
     </div>
   );
 }
@@ -209,8 +233,10 @@ const s: any = {
   clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '10px' },
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', flexShrink: 0 },
-  puBtn: { backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', color: '#ffd700', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
+  // שינוי כאן: גלילה אופקית לכוחות
+  powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '5px', flexShrink: 0, width: '100%' },
+  // שינוי כאן: פלקס-שרינק 0 כדי שהכפתורים לא יימעכו כשיש הרבה
+  puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', color: '#ffd700', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
   questionCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
   questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#ffd700', lineHeight: '1.4', margin: 0 },
   optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 },
