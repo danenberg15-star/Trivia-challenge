@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { ref, onValue, update, set, get } from 'firebase/database';
 
-// תחליף מאובטח ל-uuid שמונע קריסות של ייבוא ספריות חיצוניות
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return Math.random().toString(36).substring(2, 15);
@@ -52,11 +51,11 @@ export function useGameState() {
         creatorId: userId,
         step: 3,
         gameMode: 'team',
-        difficulty: 'dynamic', // מעודכן לפי אפיון 2.4 (משתנה = ברירת מחדל)
+        difficulty: 'dynamic', 
         players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
         teamNames: ['קבוצה 1', 'קבוצה 2'],
-        timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, // מעודכן ל-15 שניות פתיחה
-        powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] }, // תשתית לכלים עתידיים
+        timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, 
+        powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] }, 
         currentQuestionIdx: 0,
         soloQuestionCount: 0,
         votes: {},
@@ -80,38 +79,30 @@ export function useGameState() {
       if (cleanCode === 'עומר') {
         roomKey = 'qa_omer_room';
         const roomRef = ref(db, `rooms/${roomKey}`);
-        const snapshot = await get(roomRef);
+        
+        // מוחק את חדר עומר הישן ויוצר מחדש כדי להבטיח שאתה מוגדר כמנהל
+        const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
+        const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+        const bots = botNames.map((bn, i) => ({
+          id: `bot-${i}`, name: bn, teamIdx: (i + 1) % 2, color: botColors[i], isBot: true
+        }));
 
-        if (!snapshot.exists()) {
-          const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
-          const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-          const bots = botNames.map((bn, i) => ({
-            id: `bot-${i}`, name: bn, teamIdx: (i + 1) % 2, color: botColors[i], isBot: true
-          }));
-
-          const qaData = {
-            id: 'עומר',
-            creatorId: 'qa-admin',
-            step: 3,
-            gameMode: 'team',
-            difficulty: 'dynamic', 
-            players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
-            teamNames: ['קבוצה 1', 'קבוצה 2'],
-            timeBanks: { 'קבוצה 1': 60, 'קבוצה 2': 60 },
-            powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
-            currentQuestionIdx: 0,
-            votes: {},
-            status: 'waiting'
-          };
-          await set(roomRef, qaData);
-        } else {
-          const data = snapshot.val();
-          const players = data.players || [];
-          if (!players.find((p: any) => p.id === userId)) {
-            players.push({ id: userId, name, teamIdx: 0, color: '#3b82f6' });
-            await update(roomRef, { players });
-          }
-        }
+        const qaData = {
+          id: 'עומר',
+          creatorId: userId, // התיקון הקריטי: אתה עכשיו מוגדר רשמית כמנהל חדר הטסטים!
+          step: 3,
+          gameMode: 'team',
+          difficulty: 'dynamic', 
+          players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+          teamNames: ['קבוצה 1', 'קבוצה 2'],
+          timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
+          powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
+          currentQuestionIdx: 0,
+          votes: {},
+          status: 'waiting'
+        };
+        await set(roomRef, qaData); 
+        
         localStorage.setItem('trivia_user_name', name);
         setRoomId(roomKey);
         setStep(3);

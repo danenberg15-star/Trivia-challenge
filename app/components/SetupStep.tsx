@@ -7,7 +7,6 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   const ghostRef = useRef<HTMLDivElement>(null);
   const teamRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  const isAdmin = roomData.creatorId === userId;
   const gameMode = roomData.gameMode || "team";
   const difficulty = roomData.difficulty || "dynamic";
   const players = roomData.players || [];
@@ -33,7 +32,7 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   };
 
   const handleAddTeam = () => {
-    if (!isAdmin || numTeams >= 4) return;
+    if (numTeams >= 4) return;
     const newNames = [...teamNames, getNextTeamName()];
     const newTimeBanks = { ...roomData.timeBanks, [newNames[newNames.length - 1]]: 15 };
     const newPowerUps = { ...roomData.powerUps, [newNames[newNames.length - 1]]: [] };
@@ -41,7 +40,6 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   };
 
   const handleRemoveTeam = (idx: number) => {
-    if (!isAdmin) return;
     const newNames = [...teamNames];
     newNames.splice(idx, 1);
     const newPlayers = players.map((p: any) => p.teamIdx === idx ? { ...p, teamIdx: 0 } : (p.teamIdx > idx ? { ...p, teamIdx: p.teamIdx - 1 } : p));
@@ -49,20 +47,21 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   };
 
   const handlePlayerMove = (pId: string, tIdx: number) => {
-    if (!isAdmin) return;
     const newPlayers = players.map((p: any) => p.id === pId ? { ...p, teamIdx: tIdx } : p);
     updateRoom({ players: newPlayers });
   };
 
+  // בדיקה אם יש קבוצה ריקה לחלוטין
   const hasEmptyTeam = Array.from({ length: numTeams }).some((_, i) =>
     players.filter((p: any) => p.teamIdx === i).length === 0
   );
 
+  // שינינו למינימום 1 בכל קבוצה (היה 2)
   const canStart = gameMode === "individual" ? players.length >= 1 : 
-    Array.from({ length: numTeams }).every((_, i) => players.filter((p: any) => p.teamIdx === i).length >= 2);
+    Array.from({ length: numTeams }).every((_, i) => players.filter((p: any) => p.teamIdx === i).length >= 1);
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!draggedPlayer || !isAdmin) return;
+    if (!draggedPlayer) return;
     if (ghostRef.current) {
       ghostRef.current.style.left = `${e.clientX - 60}px`;
       ghostRef.current.style.top = `${e.clientY - 25}px`;
@@ -104,26 +103,24 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
         </button>
       </div>
 
-      {/* Settings - לצוות המנהל בלבד */}
-      {isAdmin && (
-        <div style={s.settingsBlock}>
-          <div style={s.settingRow}>
-            <div style={s.settingLabel}>מצב משחק:</div>
-            <div style={s.toggles}>
-              <button onClick={() => updateRoom({ gameMode: 'individual' })} style={{ ...s.toggleBtn, ...(gameMode === "individual" ? s.toggleBtnActive : {}) }}>יחידים</button>
-              <button onClick={() => updateRoom({ gameMode: 'team' })} style={{ ...s.toggleBtn, ...(gameMode === "team" ? s.toggleBtnActive : {}) }}>קבוצות</button>
-            </div>
-          </div>
-          <div style={s.settingRow}>
-            <div style={s.settingLabel}>רמת קושי:</div>
-            <div style={s.toggles}>
-              <button onClick={() => updateRoom({ difficulty: 'easy' })} style={{ ...s.toggleBtn, ...(difficulty === "easy" ? s.toggleBtnActive : {}) }}>קל</button>
-              <button onClick={() => updateRoom({ difficulty: 'dynamic' })} style={{ ...s.toggleBtn, ...((difficulty === "dynamic" || difficulty === "medium") ? s.toggleBtnActive : {}) }}>משתנה</button>
-              <button onClick={() => updateRoom({ difficulty: 'hard' })} style={{ ...s.toggleBtn, ...(difficulty === "hard" ? s.toggleBtnActive : {}) }}>קשה</button>
-            </div>
+      {/* Settings Block - חשוף לכולם */}
+      <div style={s.settingsBlock}>
+        <div style={s.settingRow}>
+          <div style={s.settingLabel}>מצב משחק:</div>
+          <div style={s.toggles}>
+            <button onClick={() => updateRoom({ gameMode: 'individual' })} style={{ ...s.toggleBtn, ...(gameMode === "individual" ? s.toggleBtnActive : {}) }}>יחידים</button>
+            <button onClick={() => updateRoom({ gameMode: 'team' })} style={{ ...s.toggleBtn, ...(gameMode === "team" ? s.toggleBtnActive : {}) }}>קבוצות</button>
           </div>
         </div>
-      )}
+        <div style={s.settingRow}>
+          <div style={s.settingLabel}>רמת קושי:</div>
+          <div style={s.toggles}>
+            <button onClick={() => updateRoom({ difficulty: 'easy' })} style={{ ...s.toggleBtn, ...(difficulty === "easy" ? s.toggleBtnActive : {}) }}>קל</button>
+            <button onClick={() => updateRoom({ difficulty: 'dynamic' })} style={{ ...s.toggleBtn, ...((difficulty === "dynamic" || difficulty === "medium") ? s.toggleBtnActive : {}) }}>משתנה</button>
+            <button onClick={() => updateRoom({ difficulty: 'hard' })} style={{ ...s.toggleBtn, ...(difficulty === "hard" ? s.toggleBtnActive : {}) }}>קשה</button>
+          </div>
+        </div>
+      </div>
 
       {/* Players Grid */}
       <div style={{ ...s.grid, gridTemplateColumns: gameMode === "team" ? '1fr 1fr' : '1fr' }}>
@@ -142,39 +139,34 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
                   <div
                     key={p.id}
                     onPointerDown={(e) => {
-                      if (!isAdmin) return;
                       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
                       setDraggedPlayer(p);
                     }}
-                    style={{ ...s.playerCard, cursor: isAdmin ? 'grab' : 'default' }}
+                    style={{ ...s.playerCard, cursor: 'grab' }}
                   >
                     {p.name} {p.id === userId ? "(את/ה)" : ""}
                   </div>
                 ))}
-                {isAdmin && gameMode === "team" && numTeams > 2 && teamPlayers.length === 0 && (
+                {gameMode === "team" && numTeams > 2 && teamPlayers.length === 0 && (
                   <button onClick={() => handleRemoveTeam(tIdx)} style={s.minusBtn}>- הסר קבוצה</button>
                 )}
               </div>
             </div>
           );
         })}
-        {isAdmin && gameMode === "team" && numTeams < 4 && !hasEmptyTeam && (
+        
+        {/* כפתור יצירת קבוצה מופיע רק כשאין קבוצות ריקות */}
+        {gameMode === "team" && numTeams < 4 && !hasEmptyTeam && (
           <button onClick={handleAddTeam} style={{ ...s.teamBox, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>
             <span style={{ fontSize: '2rem', color: '#ffd700' }}>+</span>
           </button>
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer - חשוף וזמין לכולם */}
       <div style={{ width: '100%', marginTop: '10px' }}>
-        {isAdmin ? (
-          <>
-            {!canStart && gameMode === "team" && <p style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', margin: '5px 0' }}>לפחות 2 שחקנים בכל קבוצה כדי להתחיל</p>}
-            <button onClick={onStart} disabled={!canStart} style={canStart ? s.primaryBtn : s.disabledBtn}>בואו נשחק! 🚀</button>
-          </>
-        ) : (
-          <div style={s.waitingText}>ממתינים למנהל החדר שיתחיל את המשחק... ⏳</div>
-        )}
+        {!canStart && gameMode === "team" && <p style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', margin: '5px 0' }}>לפחות שחקן 1 בכל קבוצה כדי להתחיל</p>}
+        <button onClick={onStart} disabled={!canStart} style={canStart ? s.primaryBtn : s.disabledBtn}>בואו נשחק! 🚀</button>
       </div>
 
       {/* Ghost Element for Dragging */}
@@ -203,6 +195,5 @@ const s: any = {
   playerCard: { backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', padding: '12px', margin: '5px', textAlign: 'center', color: 'white', fontWeight: 'bold' },
   minusBtn: { backgroundColor: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px', margin: '5px auto', cursor: 'pointer', width: '80%' },
   primaryBtn: { height: '60px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', width: '100%' },
-  disabledBtn: { height: '60px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'not-allowed', width: '100%' },
-  waitingText: { textAlign: 'center', color: '#ffd700', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '10px', padding: '15px', backgroundColor: 'rgba(255,215,0,0.1)', borderRadius: '15px' }
+  disabledBtn: { height: '60px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'not-allowed', width: '100%' }
 };
