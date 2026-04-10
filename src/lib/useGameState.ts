@@ -53,6 +53,7 @@ export function useGameState() {
       gameMode: 'team',
       difficulty: 'dynamic',
       seed,
+      askedQuestions: [], 
       players: [{ id: userId, name, teamIdx: 0, color: '#00E5FF' }],
       teamNames: ['קבוצה 1', 'קבוצה 2'],
       timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
@@ -70,22 +71,8 @@ export function useGameState() {
     const snapshot = await get(roomRef);
 
     if (!snapshot.exists()) {
-      // חדר QA עם 7 בוטים!
       if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
         const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-        const myPlayer = { id: userId, name, teamIdx: 0, color: '#00E5FF' };
-        
-        // 3 בוטים בקבוצה שלי (צוות 0) - יצביעו בדיוק כמוני
-        const bot1 = { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true };
-        const bot2 = { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#10b981', isBot: true };
-        const bot3 = { id: 'bot_3', name: 'בוט דודו', teamIdx: 0, color: '#34d399', isBot: true };
-        
-        // 4 בוטים בקבוצה היריבה (צוות 1) - עונים אוטומטית אחרי 10 שניות
-        const bot4 = { id: 'bot_4', name: 'בוט רוני', teamIdx: 1, color: '#FF9100', isBot: true };
-        const bot5 = { id: 'bot_5', name: 'בוט משה', teamIdx: 1, color: '#f59e0b', isBot: true };
-        const bot6 = { id: 'bot_6', name: 'בוט יוסי', teamIdx: 1, color: '#fbbf24', isBot: true };
-        const bot7 = { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true };
-
         await set(roomRef, {
           id: cleanCode,
           creatorId: userId,
@@ -93,7 +80,17 @@ export function useGameState() {
           gameMode: 'team',
           difficulty: 'dynamic',
           seed,
-          players: [myPlayer, bot1, bot2, bot3, bot4, bot5, bot6, bot7],
+          askedQuestions: [],
+          players: [
+            { id: userId, name, teamIdx: 0, color: '#00E5FF' },
+            { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true },
+            { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#10b981', isBot: true },
+            { id: 'bot_3', name: 'בוט דודו', teamIdx: 0, color: '#34d399', isBot: true },
+            { id: 'bot_4', name: 'בוט רוני', teamIdx: 1, color: '#FF9100', isBot: true },
+            { id: 'bot_5', name: 'בוט משה', teamIdx: 1, color: '#f59e0b', isBot: true },
+            { id: 'bot_6', name: 'בוט יוסי', teamIdx: 1, color: '#fbbf24', isBot: true },
+            { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true }
+          ],
           teamNames: ['קבוצת QA', 'הבוטים'],
           timeBanks: { 'קבוצת QA': 15, 'הבוטים': 15 },
           powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
@@ -119,35 +116,38 @@ export function useGameState() {
     return true;
   };
 
-  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
+  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionText: string) => {
     if (!roomData || !roomId) return;
     const me = roomData.players.find((p: any) => p.id === userId);
     const teamName = roomData.teamNames[me.teamIdx];
     const newTime = Math.max(0, timeAtAnswer + (isCorrect ? 10 : -7));
     const newTimeBanks = { ...(roomData.timeBanks || {}), [teamName]: newTime };
     const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
+    
+    const asked = roomData.askedQuestions || [];
+    const nextAsked = [...asked, questionText];
 
     if (newTime >= 120) {
-      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: teamName });
+      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: teamName, askedQuestions: nextAsked });
     } else if (newTime <= 0) {
-      updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over" });
+      updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over", askedQuestions: nextAsked });
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
       const safePowerUpsObj = roomData.powerUps || {};
       const currentPUs = safePowerUpsObj[teamName] || [];
       updateRoom({ 
         timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU,
-        currentQuestionIdx: nextIdx, votes: null,
+        currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked,
         powerUps: { ...safePowerUpsObj, [teamName]: [...currentPUs, randomPU] } 
       });
     } else {
-      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null });
+      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked });
     }
   };
 
   const restartGame = () => {
     const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
+    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, askedQuestions: [] });
   };
 
   const handleExit = () => { setStep(2); setRoomId(''); setRoomData(null); };

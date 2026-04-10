@@ -20,6 +20,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [isRevealing, setIsRevealing] = useState(false);
   const [hasFailed, setHasFailed] = useState(false);
   
+  // קריאת אפקטים מסונכרנים מהענן כדי שכל הקבוצה תראה את הכוח יחד
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
 
@@ -52,7 +53,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     if (timeLeft <= 0 && !hasFailed && !isRevealing) {
       setHasFailed(true);
       if (onDirectStepChange) onDirectStepChange(9); 
-      else handleAnswer(false, 0); 
+      else handleAnswer(false, 0, ""); 
     }
   }, [timeLeft, hasFailed, isRevealing, onDirectStepChange, handleAnswer]);
 
@@ -72,12 +73,16 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     else targetLevel = 4;
   }
 
-  const levelQuestions = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
-  const availableQuestions = levelQuestions.length > 0 ? levelQuestions : ALL_QUESTIONS; 
+  const levelPool = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
+  const askedTexts = roomData.askedQuestions || [];
   
+  // מערכת הזיכרון: מניעת כפילויות על ידי סינון שאלות שכבר נשאלו
+  let filteredPool = levelPool.filter(q => !askedTexts.includes(q.text));
+  if (filteredPool.length === 0) filteredPool = levelPool; // גיבוי למקרה נדיר שהמאגר נגמר
+
   const seed = roomData.seed || 37;
-  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % availableQuestions.length;
-  const question: QuestionType = availableQuestions[qIdx];
+  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % filteredPool.length;
+  const question: QuestionType = filteredPool[qIdx];
 
   const votes = roomData.votes || {};
   const safePowerUpsObj = roomData.powerUps || {};
@@ -89,7 +94,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     const idx = currentPUs.indexOf(pu);
     if (idx > -1) {
       currentPUs.splice(idx, 1);
+      
       let effectData: any = { type: pu, qIdx: roomData.currentQuestionIdx };
+      
       if (pu === '50:50') {
         const incorrects = [0, 1, 2, 3].filter(i => i !== question.correctIdx);
         incorrects.sort(() => Math.random() - 0.5);
@@ -97,6 +104,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       } else if (pu === 'freeze') {
         effectData.expiresAt = Date.now() + 10000;
       }
+
       updateRoom({ 
         powerUps: { ...safePowerUpsObj, [myTeamName]: currentPUs },
         teamEffects: { ...(roomData.teamEffects || {}), [myTeamName]: effectData }
@@ -108,7 +116,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     if (isRevealing || isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
     
-    // בוטים בקבוצה שלי מצביעים מיד מה שאני מצביע
+    // בוטים בקבוצה שלי מעתיקים אותי מיד (לצורכי QA)
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
@@ -116,19 +124,17 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     updateRoom({ votes: newVotes });
   };
 
-  // --- לוגיקת צד השרת לבוטים היריבים בחדר QA (מופעלת מקומית) ---
+  // --- לוגיקת הבוטים היריבים בחדר ה-QA ---
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
   useEffect(() => {
     if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isRevealing && !isFrozen && !hasFailed) {
-      // טיימר של 10 שניות
       const botTimer = setTimeout(() => {
         const currentRoom = roomDataRef.current;
-        if (currentRoom.step !== 5) return; // לא לבצע אם עברנו שאלה
+        if (currentRoom.step !== 5) return;
 
         const team2Name = currentRoom.teamNames[1];
-        // פעם יודעים, פעם טועים (מבוסס על אינדקס זוגי/אי-זוגי)
         const isCorrect = currentRoom.currentQuestionIdx % 2 === 0;
         
         const currentOtherTime = currentRoom.timeBanks[team2Name] || 15;
@@ -136,29 +142,33 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         const nextIdx = (currentRoom.currentQuestionIdx || 0) + 1;
         
         const newTimeBanks = { ...(currentRoom.timeBanks || {}), [team2Name]: newTime };
+        
+        // מוסיף את השאלה לזיכרון כשהבוט עונה
+        const asked = currentRoom.askedQuestions || [];
+        const nextAsked = [...asked, question.text];
 
         if (newTime >= 120) {
-          updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: team2Name });
+          updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: team2Name, askedQuestions: nextAsked });
         } else if (newTime <= 0) {
-          updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over" });
+          updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over", askedQuestions: nextAsked });
         } else if (nextIdx > 0 && nextIdx % 5 === 0) {
           const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
           const safePowerUpsObj = currentRoom.powerUps || {};
           const currentPUs = safePowerUpsObj[team2Name] || [];
           updateRoom({ 
             timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU,
-            currentQuestionIdx: nextIdx, votes: null,
+            currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked,
             powerUps: { ...safePowerUpsObj, [team2Name]: [...currentPUs, randomPU] } 
           });
         } else {
-          updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null });
+          updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked });
         }
-      }, 10000); // 10 שניות בדיוק
+      }, 10000); // בוטים עונים אחרי 10 שניות בדיוק
 
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isRevealing, isFrozen, hasFailed, updateRoom]);
-  // -------------------------------------------------------------
+  }, [roomData.currentQuestionIdx, roomData.id, isRevealing, isFrozen, hasFailed, updateRoom, question.text]);
+  // ------------------------------------------
 
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
   const allVoted = myTeamVotes.every((v: any) => v !== undefined);
@@ -169,7 +179,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     if (!allAgreed) return;
     setIsRevealing(true);
     setTimeout(() => {
-      handleAnswer(firstVote === question.correctIdx, timeLeft);
+      handleAnswer(firstVote === question.correctIdx, timeLeft, question.text);
     }, 1500);
   };
 
@@ -298,6 +308,7 @@ const s: any = {
   votersContainer: { display: 'flex', gap: '5px' },
   voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   
+  // Footer & Roster styling
   footer: { width: '100%', maxWidth: '600px', padding: '5px 0 10px 0', flexShrink: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' },
   rosterContainer: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '10px', border: '1px solid rgba(255,255,255,0.05)' },
   rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },

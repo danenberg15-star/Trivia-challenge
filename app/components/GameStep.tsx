@@ -47,7 +47,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       if (onDirectStepChange) {
         onDirectStepChange(9); 
       } else {
-        handleAnswer(false, 0); 
+        handleAnswer(false, 0, ""); 
       }
     }
   }, [timeLeft, hasFailed, isRevealing, onDirectStepChange, handleAnswer]);
@@ -68,12 +68,16 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     else targetLevel = 4;
   }
 
-  const levelQuestions = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
-  const availableQuestions = levelQuestions.length > 0 ? levelQuestions : ALL_QUESTIONS; 
+  const levelPool = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
   
+  // === מערכת הזיכרון: מניעת כפילויות שאישרת להוסיף ===
+  const askedTexts = roomData.askedQuestions || [];
+  let filteredPool = levelPool.filter(q => !askedTexts.includes(q.text));
+  if (filteredPool.length === 0) filteredPool = levelPool; // גיבוי במידה והמאגר התרוקן לחלוטין
+
   const seed = roomData.seed || 37;
-  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % availableQuestions.length;
-  const question: QuestionType = availableQuestions[qIdx];
+  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % filteredPool.length;
+  const question: QuestionType = filteredPool[qIdx];
 
   const votes = roomData.votes || {};
 
@@ -107,29 +111,21 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     updateRoom({ votes: newVotes });
   };
 
-  const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
-  const allVoted = myTeamVotes.every((v: any) => v !== undefined);
-  const firstVote = myTeamVotes[0];
-  const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
-
   const handleSubmit = () => {
-    if (!isIndividual && !allAgreed) return;
-    const finalAnswer = isIndividual ? votes[userId] : firstVote;
-    
+    if (votes[userId] === undefined) return;
     setIsRevealing(true);
     setTimeout(() => {
-      handleAnswer(finalAnswer === question.correctIdx, timeLeft);
+      // מעביר גם את טקסט השאלה למנהל הסטייט כדי שישמור בזיכרון
+      handleAnswer(votes[userId] === question.correctIdx, timeLeft, question.text);
     }, 1500);
   };
 
-  const maxTime = isIndividual ? 60 : 120;
+  const maxTime = 60;
   const progress = Math.min(Math.max(timeLeft / maxTime, 0), 1);
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress * circumference);
 
-  // לוגיקת צבע טיימר מעודכנת לצבעי הלוגו
-  // קפוא: טורקיז (Teal), מואט: כתום (Orange), רגיל: אדוםUX (Danger)
   const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#FF9100" : "#ef4444");
 
   return (
@@ -171,20 +167,16 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
             </div>
           ) : (
             question.options.map((opt: string, i: number) => {
-              const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
               const isSelectedByMe = votes[userId] === i;
               
-              // הגדרות צבעי תשובות מעודכנות
               let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.03)';
               let borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
               
               if (isRevealing) {
                 if (i === question.correctIdx) {
-                  // נכון: טורקיז (Teal)
                   bgColor = 'rgba(0, 229, 255, 0.15)'; 
                   borderColor = '#00E5FF';
                 } else if (isSelectedByMe) {
-                  // טעות: אדום (Red)
                   bgColor = 'rgba(239, 68, 68, 0.15)'; 
                   borderColor = '#ef4444';
                 }
@@ -201,14 +193,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
                   style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, transform: isSelectedByMe && !isRevealing ? 'scale(1.02)' : 'scale(1)' }}
                 >
                   <span style={{...s.optionText, color: isRevealing && i === question.correctIdx ? '#00E5FF' : 'white'}}>{opt}</span>
-                  
-                  {!isIndividual && votersForThis.length > 0 && (
-                    <div style={s.votersContainer}>
-                      {votersForThis.map((p: any) => (
-                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} title={p.name} />
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })
@@ -217,13 +201,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       </div>
 
       <div style={s.footer}>
-        {/* כפתור סופי מעודכן לכתום */}
         <button 
           onClick={handleSubmit} 
-          disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen}
-          style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
+          disabled={votes[userId] === undefined || isRevealing || isFrozen}
+          style={votes[userId] !== undefined ? s.submitBtn : s.submitBtnDisabled}
         >
-          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")))}
+          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : "סופי!")}
         </button>
       </div>
 
@@ -237,20 +220,14 @@ const s: any = {
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
   powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '5px', flexShrink: 0, width: '100%' },
-  // כוחות עזר מודגשים בכתום
   puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '10px', color: '#FF9100', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
   questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
-  // כותרת שאלה בכתום
   questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4', margin: 0 },
   optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 },
   optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', boxSizing: 'border-box' },
   optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  // קופסת קיפאון בטורקיז
   frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' },
-  votersContainer: { display: 'flex', gap: '5px' },
-  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { width: '100%', maxWidth: '600px', padding: '10px 0', flexShrink: 0, boxSizing: 'border-box' },
-  // כפתור סופי בכתום
   submitBtn: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' },
   submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed' }
 };

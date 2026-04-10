@@ -8,7 +8,7 @@ import EntryStep from "./components/EntryStep";
 import SetupStep from "./components/SetupStep";
 import CountdownStep from "./components/CountdownStep";
 import GameStep from "./components/GameStep";
-import MultiplayerGameStep from "./components/MultiplayerGameStep"; // ייבוא המסך החדש
+import MultiplayerGameStep from "./components/MultiplayerGameStep"; 
 import ScoreStep from "./components/ScoreStep";
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
@@ -46,10 +46,11 @@ export default function TriviaApp() {
     setUserName(name);
     if (solo) {
       setIsSolo(true);
-      const initialSoloData = {
+      setLocalRoomData({
         id: 'solo',
         gameMode: 'individual',
         difficulty,
+        askedQuestions: [], 
         players: [{ id: userId, name, teamIdx: 0, color: '#00E5FF' }],
         teamNames: [name],
         timeBanks: { [name]: 20 },
@@ -57,8 +58,7 @@ export default function TriviaApp() {
         currentQuestionIdx: 0,
         seed: Math.floor(Math.random() * 100),
         votes: {}
-      };
-      setLocalRoomData(initialSoloData);
+      });
       setLocalStep(4);
     } else {
       setIsSolo(false);
@@ -85,18 +85,25 @@ export default function TriviaApp() {
     const isWin = timeLeft >= 60;
     if (isWin) score = Math.max(1000, 10000 - (questionsReached * 150));
     else score = questionsReached * 10;
-    
     const highscoresRef = ref(db, 'highscores');
     push(highscoresRef, { name, score, questions: questionsReached, date: new Date().toLocaleDateString('he-IL'), timestamp: Date.now() });
   };
 
-  const onAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
+  const onAnswer = (isCorrect: boolean, timeAtAnswer: number, questionText: string) => {
     if (isSolo) {
       const me = localRoomData.players[0];
       const timeChange = isCorrect ? 5 : -2;
       const newTime = Math.max(0, timeAtAnswer + timeChange);
       const nextIdx = localRoomData.currentQuestionIdx + 1;
-      const updatedData = { ...localRoomData, timeBanks: { [me.name]: newTime }, currentQuestionIdx: nextIdx, lastCorrect: isCorrect, votes: {} };
+      
+      const updatedData = { 
+        ...localRoomData, 
+        timeBanks: { [me.name]: newTime }, 
+        currentQuestionIdx: nextIdx, 
+        lastCorrect: isCorrect, 
+        votes: {},
+        askedQuestions: [...(localRoomData.askedQuestions || []), questionText]
+      };
 
       if (newTime >= 60) {
         saveSoloHighscore(me.name, nextIdx, newTime);
@@ -118,7 +125,7 @@ export default function TriviaApp() {
         setLocalStep(5); 
       }
     } else {
-      handleFbAnswer(isCorrect, timeAtAnswer);
+      handleFbAnswer(isCorrect, timeAtAnswer, questionText);
     }
   };
 
@@ -141,8 +148,6 @@ export default function TriviaApp() {
       {currentStep === 2 && <EntryStep onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} onCreate={handleCreate} onSetName={setUserName} onViewHighscores={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}
       {currentStep === 3 && activeData && <SetupStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onStart={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} />}
       {currentStep === 4 && <CountdownStep timer={activeData?.preGameTimer || 3} onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} />}
-      
-      {/* הניתוב החכם למסך הנכון ללא פגיעה בסולו */}
       {currentStep === 5 && activeData && (
         isSolo ? (
           <GameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} onDirectStepChange={handleDirectStepChange} />
@@ -150,7 +155,6 @@ export default function TriviaApp() {
           <MultiplayerGameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} onDirectStepChange={handleDirectStepChange} />
         )
       )}
-      
       {currentStep === 6 && activeData && <ScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 5, currentQuestionIdx: activeData.currentQuestionIdx })} />}
       {currentStep === 7 && activeData && <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />}
       {currentStep === 8 && activeData && <CheckpointStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} />}
