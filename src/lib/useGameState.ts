@@ -80,7 +80,6 @@ export function useGameState() {
         roomKey = 'qa_omer_room';
         const roomRef = ref(db, `rooms/${roomKey}`);
         
-        // מוחק את חדר עומר הישן ויוצר מחדש כדי להבטיח שאתה מוגדר כמנהל
         const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
         const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         const bots = botNames.map((bn, i) => ({
@@ -89,7 +88,7 @@ export function useGameState() {
 
         const qaData = {
           id: 'עומר',
-          creatorId: userId, // התיקון הקריטי: אתה עכשיו מוגדר רשמית כמנהל חדר הטסטים!
+          creatorId: userId, 
           step: 3,
           gameMode: 'team',
           difficulty: 'dynamic', 
@@ -132,18 +131,23 @@ export function useGameState() {
     }
   };
 
-  const handleAnswer = async (isCorrect: boolean) => {
+  // התיקון: handleAnswer עכשיו מקבל את הזמן האמיתי שנשאר בשעון באותו רגע
+  const handleAnswer = async (isCorrect: boolean, timeAtAnswer: number) => {
     if (!roomData || !roomId) return;
     const isIndividual = roomData.gameMode === 'individual';
     const me = roomData.players.find((p: any) => p.id === userId);
     const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
     
     let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
-    const newTime = (roomData.timeBanks[key] || 0) + timeChange;
+    
+    // מוסיפים את הבונוס/קנס לזמן שנותר בפועל!
+    const newTime = timeAtAnswer + timeChange;
     const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
 
     if (newTime >= (isIndividual ? 60 : 120)) {
       updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
+    } else if (newTime <= 0) {
+      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" }); // הפסד
     } else {
       updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: {} });
     }

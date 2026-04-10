@@ -1,123 +1,155 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 
-const AthleteClock = ({ timeLeft, maxTime }: { timeLeft: number, maxTime: number }) => {
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const progress = (timeLeft / maxTime) * circumference;
-  const handRotation = (timeLeft % 60) * 6;
-
-  return (
-    <div style={{ position: 'relative', width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <svg width="160" height="160" style={{ transform: 'scaleX(-1)' }}>
-        <circle cx="80" cy="80" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-        <circle 
-          cx="80" cy="80" r={radius} fill="none" 
-          stroke={timeLeft < 10 ? "#ef4444" : "#ffd700"} 
-          strokeWidth="8" 
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference - progress}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 0.5s linear' }}
-          transform="rotate(-90 80 80)"
-        />
-        <line x1="80" y1="80" x2="80" y2="20" stroke="#ef4444" strokeWidth="3" strokeLinecap="round"
-          style={{ transform: `rotate(${handRotation}deg)`, transformOrigin: '80px 80px', transition: 'transform 1s linear' }} 
-        />
-      </svg>
-      <div style={{ position: 'absolute', fontSize: '2.5rem', fontWeight: '900', color: 'white' }}>{Math.floor(timeLeft)}</div>
-    </div>
-  );
-};
+// שאלות דמו כדי שיהיה למשחק מאיפה למשוך (עד שנחבר את הקובץ המלא)
+const MOCK_QUESTIONS = [
+  { text: "כמה יבשות יש בעולם?", options: ["5", "6", "7", "8"], correctIdx: 2 },
+  { text: "מי הגיבור הראשי במשחק מריו?", options: ["שרברב", "נגר", "חשמלאי", "שוטר"], correctIdx: 0 },
+  { text: "איזו חיה היא המהירה ביבשה?", options: ["אריה", "צבי", "ברדלס", "נמר"], correctIdx: 2 },
+  { text: "איזה חטיף ישראלי מבוסס בוטנים?", options: ["ביסלי", "במבה", "תפוצ'יפס", "אפרופו"], correctIdx: 1 },
+  { text: "מהי עיר הבירה של יפן?", options: ["בייג'ינג", "טוקיו", "סיאול", "האנוי"], correctIdx: 1 },
+];
 
 export default function GameStep({ roomData, userId, updateRoom, handleAnswer }: any) {
+  const isIndividual = roomData.gameMode === "individual";
   const me = roomData.players.find((p: any) => p.id === userId);
-  const myTeamIdx = me?.teamIdx || 0;
-  const [localTime, setLocalTime] = useState(roomData.gameMode === 'individual' ? 10 : 20);
+  const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
+  const myTeamPlayers = isIndividual ? [me] : roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
+  
+  // טיימר דינמי - מתחיל מבנק השניות העדכני של הקבוצה
+  const initialTime = roomData.timeBanks[myTeamName] || 15;
+  const [timeLeft, setTimeLeft] = useState(initialTime);
 
-  const question = {
-    text: "איזו מדינה תארח את המונדיאל בשנת 2026?",
-    options: ["קטר", "ברזיל", "ארה\"ב, קנדה ומקסיקו", "צרפת"],
-    correctIdx: 2
+  // ספירה לאחור של השעון
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const t = setInterval(() => {
+      setTimeLeft((prev: number) => prev - 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [timeLeft]);
+
+  // מניעת באגים - שליפת שאלה נכונה מהמערך במעגליות
+  const qIdx = (roomData.currentQuestionIdx || 0) % MOCK_QUESTIONS.length;
+  const question = MOCK_QUESTIONS[qIdx];
+  const votes = roomData.votes || {};
+
+  const handleVote = (optIdx: number) => {
+    let newVotes = { ...votes, [userId]: optIdx };
+    
+    // לוגיקת סנכרון בוטים לחדר ה-QA של עומר - כדי שלא תיתקע!
+    if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
+      myTeamPlayers.forEach((p: any) => {
+        if (p.isBot) newVotes[p.id] = optIdx;
+      });
+    }
+    
+    updateRoom({ votes: newVotes });
   };
 
-  const shuffledOptions = useMemo(() => {
-    return question.options.map((opt, i) => ({ text: opt, originalIdx: i }))
-      .sort(() => Math.random() - 0.5);
-  }, [roomData.currentQuestionIdx]);
+  // בדיקה האם כל חברי הקבוצה שלי הצביעו (ותנאי ללחיצה על סופי)
+  const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
+  const allVoted = myTeamVotes.every((v: any) => v !== undefined);
+  const firstVote = myTeamVotes[0];
+  const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
 
-  const teamVotes = roomData.votes?.[myTeamIdx] || {};
-  const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === myTeamIdx);
+  const handleSubmit = () => {
+    if (!isIndividual && !allAgreed) return;
+    const finalAnswer = isIndividual ? votes[userId] : firstVote;
+    const isCorrect = finalAnswer === question.correctIdx;
+    
+    // שולחים לשרת גם אם צדקנו וגם את השניות שנשארו לנו ברגע זה!
+    handleAnswer(isCorrect, timeLeft);
+  };
 
-  useEffect(() => {
-    if (roomData.id === 'עומר') {
-      const bots = roomData.players.filter((p: any) => p.isBot);
-      const newVotes = { ...roomData.votes };
-      let changed = false;
-      bots.forEach((bot: any) => {
-        if (!newVotes[bot.teamIdx]) newVotes[bot.teamIdx] = {};
-        if (bot.teamIdx === myTeamIdx && teamVotes[userId] !== undefined) {
-          if (newVotes[bot.teamIdx][bot.id] !== teamVotes[userId]) {
-            newVotes[bot.teamIdx][bot.id] = teamVotes[userId];
-            changed = true;
-          }
-        } else if (bot.teamIdx !== myTeamIdx && newVotes[bot.teamIdx][bot.id] === undefined) {
-          newVotes[bot.teamIdx][bot.id] = Math.floor(Math.random() * 4);
-          changed = true;
-        }
-      });
-      if (changed) updateRoom({ votes: newVotes });
-    }
-  }, [teamVotes[userId], roomData.votes, roomData.id]);
-
-  const everyoneAgreed = myTeamPlayers.length > 0 && 
-    myTeamPlayers.every((p: any) => teamVotes[p.id] !== undefined && teamVotes[p.id] === teamVotes[myTeamPlayers[0].id]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setLocalTime(p => (p > 0 ? p - 1 : 0)), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // חישובי ה-Athlete Clock הגרפי (מעגל אדום)
+  const maxTime = isIndividual ? 60 : 120;
+  const progress = Math.min(Math.max(timeLeft / maxTime, 0), 1);
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (progress * circumference);
 
   return (
     <div style={s.layout}>
-      <div style={s.topBar}><AthleteClock timeLeft={localTime} maxTime={roomData.gameMode === 'individual' ? 60 : 120} /></div>
-      <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
-      <div style={s.grid}>
-        {shuffledOptions.map((opt) => {
-          const voters = myTeamPlayers.filter((p: any) => teamVotes[p.id] === opt.originalIdx);
+      {/* Athlete Clock UI */}
+      <div style={s.clockContainer}>
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          {/* רקע המעגל (אפור כהה/שקוף) */}
+          <circle cx="75" cy="75" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="10" />
+          {/* פס ההתקדמות (אדום) */}
+          <circle 
+            cx="75" cy="75" r={radius} 
+            fill="none" 
+            stroke="#ef4444" 
+            strokeWidth="10" 
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            transform="rotate(-90 75 75)" 
+            style={{ transition: 'stroke-dashoffset 1s linear' }}
+          />
+        </svg>
+        <div style={s.clockTime}>{timeLeft}</div>
+      </div>
+
+      <div style={s.questionCard}>
+        <h2 style={s.questionText}>{question.text}</h2>
+      </div>
+
+      <div style={s.optionsGrid}>
+        {question.options.map((opt: string, i: number) => {
+          // מציאת השחקנים בקבוצה שלי שהצביעו לתשובה זו (בשביל המסגרות המקווקוות)
+          const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
+          const isSelectedByMe = votes[userId] === i;
+          
           return (
-            <button key={opt.originalIdx} onClick={() => {
-              const newVotes = { ...roomData.votes };
-              if (!newVotes[myTeamIdx]) newVotes[myTeamIdx] = {};
-              newVotes[myTeamIdx][userId] = opt.originalIdx;
-              updateRoom({ votes: newVotes });
-            }} style={{
-              ...s.optionBtn,
-              border: voters.length > 0 ? `3px dashed ${voters[0].color}` : '2px solid rgba(255,255,255,0.1)',
-              backgroundColor: teamVotes[userId] === opt.originalIdx ? 'rgba(255,215,0,0.1)' : '#1a1d2e'
-            }}>
-              {opt.text}
-              <div style={s.voterDots}>{voters.map((p: any) => <div key={p.id} style={{...s.dot, backgroundColor: p.color}} />)}</div>
-            </button>
+            <div 
+              key={i} 
+              onClick={() => handleVote(i)}
+              style={{
+                ...s.optionBtn,
+                borderColor: isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)',
+                backgroundColor: isSelectedByMe ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.05)'
+              }}
+            >
+              <span style={s.optionText}>{opt}</span>
+              
+              {/* חיווי ויזואלי של שאר חברי הקבוצה (פסים מקווקוים) */}
+              {!isIndividual && votersForThis.length > 0 && (
+                <div style={s.votersContainer}>
+                  {votersForThis.map((p: any) => (
+                    <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
-      <button disabled={!everyoneAgreed} onClick={() => handleAnswer(teamVotes[userId] === question.correctIdx)}
-        style={{...s.finalBtn, backgroundColor: everyoneAgreed ? '#10b981' : '#334155'}}>
-        {everyoneAgreed ? "סופי! ✅" : "מחכים להסכמה..."}
+
+      {/* כפתור סופי */}
+      <button 
+        onClick={handleSubmit} 
+        disabled={isIndividual ? votes[userId] === undefined : !allAgreed}
+        style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
+      >
+        {isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה בקבוצה...")}
       </button>
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', padding: '20px', gap: '20px', backgroundColor: '#05081c', color: 'white', direction: 'rtl' },
-  topBar: { display: 'flex', justifyContent: 'center' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '30px', padding: '30px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
-  questionText: { fontSize: '1.8rem', fontWeight: 'bold', margin: 0 },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', flex: 1 },
-  optionBtn: { position: 'relative', borderRadius: '20px', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' },
-  voterDots: { position: 'absolute', bottom: '10px', display: 'flex', gap: '5px' },
-  dot: { width: '10px', height: '10px', borderRadius: '50%' },
-  finalBtn: { height: '70px', borderRadius: '25px', border: 'none', color: 'white', fontSize: '1.5rem', fontWeight: '900', cursor: 'pointer' }
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', alignItems: 'center' },
+  clockContainer: { position: 'relative', width: '150px', height: '150px', margin: '20px auto', display: 'flex', justifyContent: 'center', alignItems: 'center' },
+  clockTime: { position: 'absolute', fontSize: '3.5rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
+  questionCard: { width: '100%', maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '30px 20px', textAlign: 'center', marginBottom: '30px', border: '1px solid rgba(255,255,255,0.1)' },
+  questionText: { fontSize: '1.5rem', fontWeight: 'bold', color: '#ffd700', lineHeight: '1.4' },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '15px', width: '100%', maxWidth: '600px', flex: 1 },
+  optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' },
+  optionText: { fontSize: '1.2rem', fontWeight: 'bold' },
+  votersContainer: { display: 'flex', gap: '5px' },
+  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
+  submitBtn: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', marginTop: '20px', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' },
+  submitBtnDisabled: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed', marginTop: '20px' }
 };
