@@ -9,6 +9,7 @@ import GameStep from "./components/GameStep";
 import ScoreStep from "./components/ScoreStep";
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
+import LoseStep from "./components/LoseStep"; // יבוא החדש
 
 export default function TriviaApp() {
   const { 
@@ -17,7 +18,6 @@ export default function TriviaApp() {
   } = useGameState();
 
   const wakeLockRef = useRef<any>(null);
-  // דגל פנימי למעבר מיידי בסולו
   const [isSoloInitiated, setIsSoloInitiated] = useState(false);
 
   useEffect(() => {
@@ -45,6 +45,7 @@ export default function TriviaApp() {
         <button 
           onClick={() => { setIsSoloInitiated(false); handleExit(); }} 
           style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="צא מהחדר"
         >
           ✕
         </button>
@@ -71,7 +72,6 @@ export default function TriviaApp() {
 
       {step === 3 && (
         isSoloInitiated || roomData?.gameMode === "individual" ? (
-          /* דריסה: אם זה סולו, מציגים את הספירה לאחור כאן כדי למנוע היתקעות */
           <CountdownStep 
             timer={3} 
             onComplete={() => {
@@ -127,6 +127,11 @@ export default function TriviaApp() {
           userId={userId}
           updateRoom={updateRoom}
         />
+      )}
+
+      {/* שלב ההפסד החדש */}
+      {step === 9 && (
+        <LoseStep onRestart={() => { setIsSoloInitiated(false); restartGame(); }} />
       )}
     </main>
   );

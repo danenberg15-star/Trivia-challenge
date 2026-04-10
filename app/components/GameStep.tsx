@@ -32,6 +32,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx]);
 
+  // לוגיקה לזיהוי הפסד - טיימר הגיע ל-0
+  useEffect(() => {
+    if (timeLeft <= 0 && !isRevealing) {
+      updateRoom({ step: 9 });
+    }
+  }, [timeLeft, isRevealing, updateRoom]);
+
   useEffect(() => {
     if (timeLeft <= 0 || isRevealing || isFrozen) return;
     const delay = isSlowMo ? 2000 : 1000;
@@ -93,7 +100,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   };
 
   const handleVote = (optIdx: number) => {
-    if (isRevealing || isFrozen) return; 
+    if (isRevealing || isFrozen || timeLeft <= 0) return; 
     let newVotes = { ...votes, [userId]: optIdx };
     if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
@@ -107,6 +114,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
 
   const handleSubmit = () => {
+    if (timeLeft <= 0) return;
     if (!isIndividual && !allAgreed) return;
     const finalAnswer = isIndividual ? votes[userId] : firstVote;
     const isCorrect = finalAnswer === question.correctIdx;
@@ -128,7 +136,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   return (
     <div style={s.layout}>
       
-      {/* 1. אזור עליון - השעון (נעוץ) */}
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
@@ -141,10 +148,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
         <div style={s.clockTime}>{timeLeft}</div>
       </div>
 
-      {/* 2. אזור מרכזי - תוכן דינמי נגלל (Scrollable) */}
       <div style={s.contentArea}>
-        
-        {/* כוחות */}
         {myPowerUps.length > 0 && !isRevealing && (
           <div style={s.powerUpsContainer}>
             {myPowerUps.map((pu: string, i: number) => (
@@ -157,12 +161,10 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
           </div>
         )}
 
-        {/* שאלות */}
         <div style={s.questionCard}>
           <h2 style={s.questionText}>{question.text}</h2>
         </div>
 
-        {/* תשובות */}
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>
@@ -197,13 +199,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
                   style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
                 >
                   <span style={s.optionText}>{opt}</span>
-                  {!isIndividual && votersForThis.length > 0 && (
-                    <div style={s.votersContainer}>
-                      {votersForThis.map((p: any) => (
-                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })
@@ -211,14 +206,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
         </div>
       </div>
 
-      {/* 3. אזור תחתון - כפתור "סופי" (נעוץ) */}
       <div style={s.footer}>
         <button 
           onClick={handleSubmit} 
-          disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen}
+          disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen || timeLeft <= 0}
           style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
         >
-          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")))}
+          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (timeLeft <= 0 ? "נגמר הזמן ⏰" : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה..."))))}
         </button>
       </div>
 
@@ -239,8 +233,6 @@ const s: any = {
   optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' },
   optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
   frozenBox: { backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '2px dashed #3b82f6', borderRadius: '15px', padding: '25px', color: '#3b82f6', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' },
-  votersContainer: { display: 'flex', gap: '5px' },
-  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { width: '100%', maxWidth: '600px', padding: '10px 0', flexShrink: 0, boxSizing: 'border-box' },
   submitBtn: { width: '100%', height: '65px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' },
   submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed' }
