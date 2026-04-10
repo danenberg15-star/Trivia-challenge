@@ -65,7 +65,6 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           disabled={loading}
         />
 
-        {/* בחירת רמת קושי */}
         <div style={s.settingsBlock}>
           <div style={s.settingLabel}>רמת קושי למשחק:</div>
           <div style={s.toggles}>
@@ -75,12 +74,10 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           </div>
         </div>
 
-        {/* אופציה 1: סולו */}
         <button onClick={handleSolo} disabled={loading} style={s.soloBtn}>
            ⏱️ נראה אותך מנצח את הטיימר
         </button>
 
-        {/* אופציה 2: קבוצתי בתוך מסגרת */}
         <div style={s.groupFrame}>
           <div style={s.groupLabel}>משחק קבוצתי</div>
           
