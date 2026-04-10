@@ -66,10 +66,16 @@ export default function TriviaApp() {
     }
   };
 
-  // עדכון נתונים גנרי
+  // עדכון נתונים גנרי - תוקן כדי שיחליף מסך כשצריך
   const updateActiveRoom = (updates: any) => {
-    if (isSolo) setLocalRoomData((prev: any) => ({ ...prev, ...updates }));
-    else updateFbRoom(updates);
+    if (isSolo) {
+      setLocalRoomData((prev: any) => ({ ...prev, ...updates }));
+      if (updates.step !== undefined) {
+        setLocalStep(updates.step); // התיקון שמשחרר את התקיעות בצ'ק-פוינט
+      }
+    } else {
+      updateFbRoom(updates);
+    }
   };
 
   // טיפול בתשובה (פיצול לוגיקה בין סולו לקבוצה)

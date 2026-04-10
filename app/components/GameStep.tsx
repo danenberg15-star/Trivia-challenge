@@ -32,12 +32,23 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
+  // שעון יורד
   useEffect(() => {
     if (timeLeft <= 0 || isRevealing || isFrozen) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
   }, [timeLeft, isRevealing, isFrozen, isSlowMo]);
+
+  // זיהוי 0 בשעון והגשה אוטומטית כטעות
+  useEffect(() => {
+    if (timeLeft <= 0 && !isRevealing) {
+      setIsRevealing(true);
+      setTimeout(() => {
+        handleAnswer(false, 0); 
+      }, 1500);
+    }
+  }, [timeLeft, isRevealing, handleAnswer]);
 
   const difficulty = roomData.difficulty || 'dynamic';
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
