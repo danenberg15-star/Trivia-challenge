@@ -5,9 +5,10 @@ interface EntryStepProps {
   onJoin: (code: string, name: string) => Promise<boolean>;
   onCreate: (name: string, isSolo: boolean, difficulty?: string) => Promise<void>;
   onSetName: (name: string) => void;
+  onViewHighscores: () => void;
 }
 
-export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProps) {
+export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscores }: EntryStepProps) {
   const [name, setName] = useState("");
   const [inputCode, setInputCode] = useState("");
   const [difficulty, setDifficulty] = useState("dynamic");
@@ -34,7 +35,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
   };
 
   const handleJoin = async () => {
-    if (!validateName()) return;
+    if (!name.trim()) return alert("אנא הכנס שם 🙂");
     if (!inputCode.trim()) return alert("אנא הכנס קוד חדר");
     setLoading(true);
     try {
@@ -46,11 +47,12 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
 
   return (
     <div style={s.layout}>
+      <button onClick={onViewHighscores} style={s.trophyBtn} title="טבלת שיאים">🏆</button>
+      
       <h1 style={s.title}>Trivia Time</h1>
       <div style={s.form}>
         <input style={s.input} placeholder="שם שחקן" value={name} onChange={(e) => { setName(e.target.value); onSetName(e.target.value); }} disabled={loading} />
         
-        {/* הגדרות קושי לסולו */}
         <div style={s.settingsBlock}>
           <div style={s.settingLabel}>רמת קושי (למשחק יחיד):</div>
           <div style={s.toggles}>
@@ -75,7 +77,8 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl' },
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', position: 'relative' },
+  trophyBtn: { position: 'absolute', top: '20px', right: '20px', fontSize: '2rem', background: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '50%', width: '60px', height: '60px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(255,215,0,0.2)', zIndex: 10, transition: 'transform 0.2s' },
   title: { color: '#ffd700', fontSize: '3rem', fontWeight: '900', marginBottom: '20px' },
   form: { width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '15px' },
   input: { height: '55px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.2rem' },

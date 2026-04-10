@@ -10,6 +10,7 @@ import ScoreStep from "./components/ScoreStep";
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
 import LoseStep from "./components/LoseStep";
+import HighscoresStep from "./components/HighscoresStep";
 
 export default function TriviaApp() {
   const firebaseProps = useGameState();
@@ -19,14 +20,12 @@ export default function TriviaApp() {
     handleAnswer: handleFbAnswer, restartGame: restartFbGame, handleExit: handleFbExit 
   } = firebaseProps;
 
-  // State מקומי למשחק יחיד (ללא פיירבייס)
   const [isSolo, setIsSolo] = useState(false);
   const [localStep, setLocalStep] = useState(1);
   const [localRoomData, setLocalRoomData] = useState<any>(null);
 
   const wakeLockRef = useRef<any>(null);
 
-  // הנתונים הפעילים (מקומי או פיירבייס)
   const currentStep = isSolo ? localStep : fbStep;
   const activeData = isSolo ? localRoomData : fbRoomData;
 
@@ -41,7 +40,6 @@ export default function TriviaApp() {
 
   if (!mounted) return null;
 
-  // יצירת משחק (מקומי או רשת)
   const handleCreate = async (name: string, solo: boolean, diff: string = "dynamic") => {
     setUserName(name);
     if (solo) {
@@ -59,26 +57,50 @@ export default function TriviaApp() {
         votes: {}
       };
       setLocalRoomData(initialSoloData);
-      setLocalStep(4); // מעבר ישיר לספירה לאחור בסולו
+      setLocalStep(4);
     } else {
       setIsSolo(false);
       await handleCreateRoom(name);
     }
   };
 
-  // התיקון הקריטי: עדכון נתונים שמעדכן גם את התצוגה המקומית אם התקבל step חדש
   const updateActiveRoom = (updates: any) => {
     if (isSolo) {
       setLocalRoomData((prev: any) => ({ ...prev, ...updates }));
-      if (updates.step !== undefined) {
-        setLocalStep(updates.step); // חילוץ מתקיעות בצ'ק פוינט או כל מעבר מסך אחר
-      }
+      if (updates.step !== undefined) setLocalStep(updates.step);
     } else {
       updateFbRoom(updates);
     }
   };
 
-  // טיפול בתשובה
+  const handleDirectStepChange = (newStep: number) => {
+    if (isSolo) setLocalStep(newStep);
+    else updateFbRoom({ step: newStep });
+  };
+
+  const saveSoloHighscore = (name: string, questionsReached: number, timeLeft: number) => {
+    let score = 0;
+    const isWin = timeLeft >= 60;
+
+    if (isWin) {
+      // שיטת Speedrun: בסיס 10,000 פחות 150 לכל שאלה שנדרשה
+      score = Math.max(1000, 10000 - (questionsReached * 150));
+    } else {
+      // הפסד: ניקוד הישרדות סמלי בלבד
+      score = questionsReached * 10;
+    }
+
+    const currentScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
+    currentScores.push({ 
+      name, 
+      score, 
+      questions: questionsReached, 
+      date: new Date().toLocaleDateString('he-IL') 
+    });
+    currentScores.sort((a: any, b: any) => b.score - a.score);
+    localStorage.setItem('trivia_solo_highscores', JSON.stringify(currentScores.slice(0, 10)));
+  };
+
   const onAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
     if (isSolo) {
       const me = localRoomData.players[0];
@@ -94,30 +116,29 @@ export default function TriviaApp() {
       };
 
       if (newTime >= 60) {
+        saveSoloHighscore(me.name, nextIdx, newTime);
         setLocalRoomData({ ...updatedData, winnerName: me.name });
-        setLocalStep(7); // ניצחון
+        setLocalStep(7); 
       } else if (newTime <= 0) {
+        saveSoloHighscore(me.name, nextIdx, 0);
         setLocalRoomData(updatedData);
-        setLocalStep(9); // הפסד
+        setLocalStep(9); 
       } else if (nextIdx > 0 && nextIdx % 5 === 0) {
-        // צ'ק-פוינט כל 5 שאלות
         const powers = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powers[Math.floor(Math.random() * powers.length)];
         updatedData.powerUps = { [me.name]: [...(localRoomData.powerUps[me.name] || []), randomPU] };
         updatedData.lastGrantedPowerUp = randomPU;
         setLocalRoomData(updatedData);
-        setLocalStep(8);
+        setLocalStep(8); 
       } else {
-        // רציף - מדלג ישירות לשאלה הבאה ללא מסך ניקוד
         setLocalRoomData(updatedData);
-        setLocalStep(5);
+        setLocalStep(5); 
       }
     } else {
       handleFbAnswer(isCorrect, timeAtAnswer);
     }
   };
 
-  // יציאה ואיפוס
   const onExit = () => {
     if (isSolo) { setIsSolo(false); setLocalStep(2); setLocalRoomData(null); } 
     else { handleFbExit(); }
@@ -131,20 +152,18 @@ export default function TriviaApp() {
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
       
-      {currentStep >= 3 && (
-        <button 
-          onClick={onExit} 
-          style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >✕</button>
+      {currentStep >= 3 && currentStep !== 10 && (
+        <button onClick={onExit} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
       )}
 
-      {currentStep === 1 && <RulesStep onStart={() => isSolo ? setLocalStep(2) : setFbStep(2)} />}
+      {currentStep === 1 && <RulesStep onStart={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}
       
       {currentStep === 2 && (
         <EntryStep 
           onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} 
           onCreate={handleCreate} 
           onSetName={setUserName} 
+          onViewHighscores={() => isSolo ? setLocalStep(10) : setFbStep(10)}
         />
       )}
 
@@ -157,23 +176,29 @@ export default function TriviaApp() {
       )}
       
       {currentStep === 5 && activeData && (
-        <GameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} />
+        <GameStep 
+          roomData={activeData} 
+          userId={userId} 
+          updateRoom={updateActiveRoom} 
+          handleAnswer={onAnswer}
+          onDirectStepChange={handleDirectStepChange}
+        />
       )}
 
       {currentStep === 6 && activeData && (
         <ScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 5, currentQuestionIdx: activeData.currentQuestionIdx })} />
       )}
       
-      {currentStep === 7 && activeData && (
-        <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />
-      )}
+      {currentStep === 7 && activeData && <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />}
 
       {currentStep === 8 && activeData && (
-        <CheckpointStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} />
+        <CheckpointStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} />
       )}
 
-      {currentStep === 9 && (
-        <LoseStep onRestart={onRestart} />
+      {currentStep === 9 && <LoseStep onRestart={onRestart} />}
+
+      {currentStep === 10 && (
+        <HighscoresStep onClose={() => isSolo ? setLocalStep(2) : setFbStep(2)} />
       )}
     </main>
   );
