@@ -68,19 +68,49 @@ export function useGameState() {
     const cleanCode = code.trim();
     const roomRef = ref(db, `rooms/${cleanCode}`);
     const snapshot = await get(roomRef);
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const players = data.players || [];
-      if (!players.find((p: any) => p.id === userId)) {
-        const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-        players.push({ id: userId, name, teamIdx: players.length % 2, color: colors[players.length % colors.length] });
-        await update(roomRef, { players });
+
+    // בדיקה: אם החדר לא קיים
+    if (!snapshot.exists()) {
+      // דלת אחורית ליצירת חדר QA באופן אוטומטי אם הוא נמחק
+      if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
+        const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+        const myPlayer = { id: userId, name, teamIdx: 0, color: '#00E5FF' };
+        // יצירת הבוטים הווירטואליים שיצביעו אוטומטית לפי הקוד ב-GameStep
+        const bot1 = { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#FF9100', isBot: true };
+        const bot2 = { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#ef4444', isBot: true };
+
+        await set(roomRef, {
+          id: cleanCode,
+          creatorId: userId,
+          step: 3,
+          gameMode: 'team',
+          difficulty: 'dynamic',
+          seed,
+          players: [myPlayer, bot1, bot2],
+          teamNames: ['קבוצת QA', 'קבוצה 2'],
+          timeBanks: { 'קבוצת QA': 15, 'קבוצה 2': 15 },
+          powerUps: { 'קבוצת QA': [], 'קבוצה 2': [] },
+          currentQuestionIdx: 0,
+          votes: null
+        });
+        localStorage.setItem('trivia_user_name', name);
+        setRoomId(cleanCode);
+        return true;
       }
-      localStorage.setItem('trivia_user_name', name);
-      setRoomId(cleanCode);
-      return true;
+      return false; // חדר רגיל שלא קיים יחזיר שגיאה כרגיל
     }
-    return false;
+
+    // אם החדר קיים, הצטרפות רגילה
+    const data = snapshot.val();
+    const players = data.players || [];
+    if (!players.find((p: any) => p.id === userId)) {
+      const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+      players.push({ id: userId, name, teamIdx: players.length % 2, color: colors[players.length % colors.length] });
+      await update(roomRef, { players });
+    }
+    localStorage.setItem('trivia_user_name', name);
+    setRoomId(cleanCode);
+    return true;
   };
 
   const handleAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
