@@ -4,6 +4,7 @@ import { getDatabase } from "firebase/database";
 const firebaseConfig = {
   apiKey: "AIzaSyArzxTaSFXwd4-bOVj3ggqGjYtb7e2ef0w",
   authDomain: "trivia-time-challenge.firebaseapp.com",
+  databaseURL: "https://trivia-time-challenge-default-rtdb.firebaseio.com", // <-- השורה הקריטית שהייתה חסרה!
   projectId: "trivia-time-challenge",
   storageBucket: "trivia-time-challenge.firebasestorage.app",
   messagingSenderId: "156140186843",

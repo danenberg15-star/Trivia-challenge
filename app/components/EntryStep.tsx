@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, CSSProperties } from "react";
+import React, { useState } from "react";
 
 interface EntryStepProps {
   onJoin: (code: string, name: string) => Promise<boolean>;
@@ -10,17 +10,30 @@ interface EntryStepProps {
 export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProps) {
   const [name, setName] = useState("");
   const [inputCode, setInputCode] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return alert("אנא הכנס שם 🙂");
-    onCreate(name);
+    setLoading(true);
+    try {
+      await onCreate(name);
+    } catch (e: any) {
+      alert("שגיאה ביצירת חדר: " + (e.message || "נסה שוב"));
+    }
+    setLoading(false);
   };
 
   const handleJoin = async () => {
     if (!name.trim()) return alert("אנא הכנס שם 🙂");
     if (!inputCode.trim()) return alert("אנא הכנס קוד חדר");
-    const success = await onJoin(inputCode, name);
-    if (!success) alert("חדר לא נמצא");
+    setLoading(true);
+    try {
+      const success = await onJoin(inputCode, name);
+      if (!success) alert("חדר לא נמצא");
+    } catch (e: any) {
+      alert("שגיאה בהצטרפות: " + (e.message || "נסה שוב"));
+    }
+    setLoading(false);
   };
 
   return (
@@ -32,8 +45,11 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           placeholder="שם שחקן" 
           value={name} 
           onChange={(e) => { setName(e.target.value); onSetName(e.target.value); }} 
+          disabled={loading}
         />
-        <button onClick={handleCreate} style={s.primaryBtn}>+ פתיחת חדר חדש</button>
+        <button onClick={handleCreate} disabled={loading} style={{...s.primaryBtn, opacity: loading ? 0.7 : 1}}>
+          {loading ? "מייצר חדר..." : "+ פתיחת חדר חדש"}
+        </button>
         
         <div style={s.divider}>או הצטרפות</div>
         
@@ -41,9 +57,12 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           style={s.input} 
           placeholder="קוד חדר" 
           value={inputCode} 
-          onChange={(e) => setInputCode(e.target.value.toUpperCase())} 
+          onChange={(e) => setInputCode(e.target.value.trim())} 
+          disabled={loading}
         />
-        <button onClick={handleJoin} style={s.secondaryBtn}>הצטרפות למשחק</button>
+        <button onClick={handleJoin} disabled={loading} style={{...s.secondaryBtn, opacity: loading ? 0.7 : 1}}>
+          {loading ? "מתחבר..." : "הצטרפות למשחק"}
+        </button>
       </div>
     </div>
   );

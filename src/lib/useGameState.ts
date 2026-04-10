@@ -2,7 +2,12 @@
 import { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { ref, onValue, update, set, get } from 'firebase/database';
-import { v4 as uuidv4 } from 'uuid';
+
+// תחליף ל-uuid שמונע שגיאות ייבוא מודולים חיצוניים
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return Math.random().toString(36).substring(2, 15);
+};
 
 export function useGameState() {
   const [mounted, setMounted] = useState(false);
@@ -14,7 +19,7 @@ export function useGameState() {
 
   useEffect(() => {
     setMounted(true);
-    const savedId = localStorage.getItem('trivia_user_id') || uuidv4();
+    const savedId = localStorage.getItem('trivia_user_id') || generateId();
     localStorage.setItem('trivia_user_id', savedId);
     setUserId(savedId);
     const savedName = localStorage.getItem('trivia_user_name') || '';
@@ -40,78 +45,100 @@ export function useGameState() {
   };
 
   const handleCreateRoom = async (name: string) => {
-    const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
-    const initialData = {
-      id: newRoomId,
-      creatorId: userId,
-      step: 3,
-      gameMode: 'team',
-      difficulty: 'medium',
-      players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
-      teamNames: ['קבוצה 1', 'קבוצה 2'],
-      timeBanks: { 'קבוצה 1': 20, 'קבוצה 2': 20 },
-      currentQuestionIdx: 0,
-      votes: {},
-      status: 'waiting'
-    };
-    await set(ref(db, `rooms/${newRoomId}`), initialData);
-    localStorage.setItem('trivia_user_name', name);
-    setRoomId(newRoomId);
-    setStep(3); // מעבר מיידי
-  };
-
-  const handleJoinRoom = async (code: string, name: string) => {
-    const cleanCode = code.trim();
-    const roomRef = ref(db, `rooms/${cleanCode}`);
-    
-    // לוגיקת חדר QA "עומר"
-    if (cleanCode === 'עומר') {
-      const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
-      const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-      const bots = botNames.map((bn, i) => ({
-        id: `bot-${i}`,
-        name: bn,
-        teamIdx: (i + 1) % 2,
-        color: botColors[i],
-        isBot: true
-      }));
-
-      const qaData = {
-        id: 'עומר',
-        creatorId: 'qa-admin',
+    try {
+      const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
+      const initialData = {
+        id: newRoomId,
+        creatorId: userId,
         step: 3,
         gameMode: 'team',
         difficulty: 'medium',
-        players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+        players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
         teamNames: ['קבוצה 1', 'קבוצה 2'],
-        timeBanks: { 'קבוצה 1': 60, 'קבוצה 2': 60 },
+        timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, // אפיון 2.3: זמן פתיחה 15 שניות
+        powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },  // אפיון 2.3: תשתית למערך כלים
         currentQuestionIdx: 0,
+        soloQuestionCount: 0, 
         votes: {},
         status: 'waiting'
       };
-      await set(roomRef, qaData);
+      await set(ref(db, `rooms/${newRoomId}`), initialData);
       localStorage.setItem('trivia_user_name', name);
-      setRoomId('עומר');
-      setStep(3);
-      return true;
+      setRoomId(newRoomId);
+      setStep(3); 
+    } catch (err: any) {
+      console.error(err);
+      throw new Error(err.message);
     }
+  };
 
-    const snapshot = await get(roomRef);
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const players = data.players || [];
-      if (!players.find((p: any) => p.id === userId)) {
-        const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-        const playerColor = colors[players.length % colors.length];
-        players.push({ id: userId, name, teamIdx: players.length % 2, color: playerColor });
-        await update(roomRef, { players });
+  const handleJoinRoom = async (code: string, name: string) => {
+    try {
+      const cleanCode = code.trim();
+      let roomKey = cleanCode;
+
+      if (cleanCode === 'עומר') {
+        roomKey = 'qa_omer_room'; // נתיב תקין באנגלית לפיירבייס
+        const roomRef = ref(db, `rooms/${roomKey}`);
+        const snapshot = await get(roomRef);
+
+        if (!snapshot.exists()) {
+          const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
+          const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+          const bots = botNames.map((bn, i) => ({
+            id: `bot-${i}`, name: bn, teamIdx: (i + 1) % 2, color: botColors[i], isBot: true
+          }));
+
+          const qaData = {
+            id: 'עומר', // להצגה בממשק
+            creatorId: 'qa-admin',
+            step: 3,
+            gameMode: 'team',
+            difficulty: 'medium',
+            players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+            teamNames: ['קבוצה 1', 'קבוצה 2'],
+            timeBanks: { 'קבוצה 1': 60, 'קבוצה 2': 60 },
+            powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
+            currentQuestionIdx: 0,
+            votes: {},
+            status: 'waiting'
+          };
+          await set(roomRef, qaData);
+        } else {
+          const data = snapshot.val();
+          const players = data.players || [];
+          if (!players.find((p: any) => p.id === userId)) {
+            players.push({ id: userId, name, teamIdx: 0, color: '#3b82f6' });
+            await update(roomRef, { players });
+          }
+        }
+        localStorage.setItem('trivia_user_name', name);
+        setRoomId(roomKey);
+        setStep(3);
+        return true;
       }
-      localStorage.setItem('trivia_user_name', name);
-      setRoomId(cleanCode);
-      setStep(data.step || 3);
-      return true;
+
+      const roomRef = ref(db, `rooms/${cleanCode}`);
+      const snapshot = await get(roomRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const players = data.players || [];
+        if (!players.find((p: any) => p.id === userId)) {
+          const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+          const playerColor = colors[players.length % colors.length];
+          players.push({ id: userId, name, teamIdx: players.length % 2, color: playerColor });
+          await update(roomRef, { players, step: data.step || 3 });
+        }
+        localStorage.setItem('trivia_user_name', name);
+        setRoomId(cleanCode);
+        setStep(data.step || 3);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error(err);
+      throw new Error(err.message);
     }
-    return false;
   };
 
   const handleAnswer = async (isCorrect: boolean) => {
@@ -120,6 +147,7 @@ export function useGameState() {
     const me = roomData.players.find((p: any) => p.id === userId);
     const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
     
+    // אפיון 2.3: הניקוד המעודכן
     let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
     const newTime = (roomData.timeBanks[key] || 0) + timeChange;
     const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
@@ -132,7 +160,7 @@ export function useGameState() {
   };
 
   const restartGame = () => {
-    updateRoom({ step: 3, currentQuestionIdx: 0, votes: {}, timeBanks: { 'קבוצה 1': 20, 'קבוצה 2': 20 } });
+    updateRoom({ step: 3, currentQuestionIdx: 0, votes: {}, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
   };
 
   return {
