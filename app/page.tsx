@@ -48,7 +48,7 @@ export default function TriviaApp() {
         id: 'solo',
         gameMode: 'individual',
         difficulty: diff,
-        players: [{ id: userId, name, teamIdx: 0, color: '#10b981' }],
+        players: [{ id: userId, name, teamIdx: 0, color: '#00E5FF' }], // צבע שחקן עודכן לטורקיז
         teamNames: [name],
         timeBanks: { [name]: 20 },
         powerUps: { [name]: [] },
@@ -83,10 +83,8 @@ export default function TriviaApp() {
     const isWin = timeLeft >= 60;
 
     if (isWin) {
-      // שיטת Speedrun: בסיס 10,000 פחות 150 לכל שאלה שנדרשה
       score = Math.max(1000, 10000 - (questionsReached * 150));
     } else {
-      // הפסד: ניקוד הישרדות סמלי בלבד
       score = questionsReached * 10;
     }
 
@@ -150,10 +148,15 @@ export default function TriviaApp() {
   };
 
   return (
-    <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
+    <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative', fontFamily: 'sans-serif' }}>
       
       {currentStep >= 3 && currentStep !== 10 && (
-        <button onClick={onExit} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        <button 
+          onClick={onExit} 
+          style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+          onMouseOver={(e) => e.currentTarget.style.borderColor = '#FF9100'}
+          onMouseOut={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'}
+        >✕</button>
       )}
 
       {currentStep === 1 && <RulesStep onStart={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}

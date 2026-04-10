@@ -1,31 +1,31 @@
 "use client";
 import React from "react";
 
-export default function VictoryStep({ winnerName, onRestart }: { winnerName: string, onRestart: () => void }) {
+export default function VictoryStep({ winnerName, onRestart }: { winnerName: string; onRestart: () => void }) {
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100vw', height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', padding: '20px', position: 'relative', overflow: 'hidden' }}>
-      <div className="confetti-container">
-        <style>{`
-          .confetti-container { position: absolute; width: 100%; height: 100%; overflow: hidden; pointer-events: none; top: 0; left: 0; z-index: 1; }
-          .confetti { position: absolute; width: 12px; height: 12px; animation: fall 4s linear infinite; opacity: 0.9; }
-          @keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
-        `}</style>
-        {[...Array(50)].map((_, i) => (
-          <div key={i} className="confetti" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 4}s`, backgroundColor: ['#ffd700', '#ff5e5e', '#5eff8a', '#5ebcff'][i % 4], borderRadius: i % 3 === 0 ? '50%' : '0' }} />
-        ))}
-      </div>
-      
-      <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center' }}>
-        <div style={{ fontSize: '120px', animation: 'bounce 2s infinite' }}>🏆</div>
-        <h1 style={{ color: 'white', fontSize: '2.2rem', fontWeight: '900' }}>ניצחון מוחץ!</h1>
-        <div style={{ backgroundColor: '#ffd700', padding: '15px 40px', borderRadius: '20px', boxShadow: '0 8px 25px rgba(255, 215, 0, 0.3)' }}>
-          <h2 style={{ color: '#05081c', fontSize: '2.5rem', fontWeight: '900', margin: '0' }}>{winnerName}</h2>
+    <div style={s.layout}>
+      <div style={s.container}>
+        <div style={s.icon}>🏆</div>
+        <h1 style={s.title}>יש לנו מנצח!</h1>
+        <div style={s.winnerCard}>
+          <div style={s.winnerLabel}>מקום ראשון:</div>
+          <div style={s.winnerName}>{winnerName}</div>
         </div>
-      </div>
-
-      <div style={{ zIndex: 10, position: 'absolute', bottom: '30px', width: '100%', padding: '0 20px' }}>
-         <button onClick={onRestart} style={{ width: '100%', minHeight: '60px', borderRadius: '18px', backgroundColor: '#ffd700', color: '#05081c', fontWeight: '900', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}>משחק חדש 🔄</button>
+        <p style={s.text}>כל הכבוד! הגעתם ליעד הזמן וניצחתם במשחק.</p>
+        <button onClick={onRestart} style={s.button}>לשחק שוב? 🔄</button>
       </div>
     </div>
   );
 }
+
+const s: any = {
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', alignItems: 'center', justifyContent: 'center' },
+  container: { width: '100%', maxWidth: '450px', backgroundColor: '#1a1d2e', borderRadius: '30px', padding: '40px 20px', textAlign: 'center', border: '2px solid #FF9100', boxShadow: '0 10px 30px rgba(255,145,0,0.3)' },
+  icon: { fontSize: '6rem', marginBottom: '20px', filter: 'drop-shadow(0 0 10px #FF9100)' },
+  title: { color: '#FF9100', fontSize: '3rem', fontWeight: '900', margin: '0 0 20px 0' },
+  winnerCard: { backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '20px', padding: '20px', marginBottom: '30px' },
+  winnerLabel: { fontSize: '1.1rem', color: '#FF9100', marginBottom: '10px' },
+  winnerName: { fontSize: '2.5rem', fontWeight: '900', color: 'white', textShadow: '0 0 10px rgba(255,255,255,0.5)' },
+  text: { fontSize: '1.2rem', marginBottom: '30px', opacity: 0.9, lineHeight: '1.5' },
+  button: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '18px', fontSize: '1.5rem', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.3)', transition: 'transform 0.2s' }
+};

@@ -1,48 +1,51 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
-const powerUpNames: any = {
-  '50:50': '50:50 (העלמת 2 תשובות)',
-  'freeze': 'הקפאת זמן (10 שניות)',
-  'slow-mo': 'הילוך איטי (שאלה אחת)'
-};
+export default function CheckpointStep({ roomData, userId, updateRoom, onComplete }: any) {
+  const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
+  const teamName = roomData.teamNames[me.teamIdx];
+  const powerUp = roomData.lastGrantedPowerUp || 'freeze';
+  const [timer, setTimer] = useState(5);
 
-export default function CheckpointStep({ roomData, userId, updateRoom }: any) {
-  const me = roomData.players.find((p: any) => p.id === userId);
-  const myTime = roomData.timeBanks[me.name];
-  const pu = roomData.lastGrantedPowerUp;
+  useEffect(() => {
+    if (timer <= 0) {
+      if (onComplete) onComplete(); 
+      else updateRoom({ step: 5 });
+      return;
+    }
+    const t = setInterval(() => setTimer(p => p - 1), 1000);
+    return () => clearInterval(t);
+  }, [timer, updateRoom, onComplete]);
 
-  const handleNext = () => {
-    updateRoom({ step: 5 }); // חזרה למשחק
-  };
+  const puName = powerUp === '50:50' ? '🌗 50:50' : powerUp === 'freeze' ? '❄️ הקפאה' : '🐢 האטה';
 
   return (
     <div style={s.layout}>
-      <h1 style={s.title}>צ'ק-פוינט! 🎯</h1>
-      <p style={s.subtitle}>סיימת 5 שאלות בהצלחה.</p>
-      
-      <div style={s.statsBox}>
-        <div style={s.stat}>זמן בקופה: <span style={{ color: '#ffd700', fontSize: '2rem', display: 'block' }}>{myTime} שניות</span></div>
-      </div>
+      <div style={s.container}>
+        <div style={s.icon}>🎁</div>
+        <h1 style={s.title}>צ'ק פוינט!</h1>
+        <p style={s.text}>כל הכבוד {me.name}, שרדתם מספיק זמן!</p>
+        
+        <div style={s.puCard}>
+          <div style={s.puLabel}>קבלו כוח עזר לקבוצת {teamName}:</div>
+          <div style={s.puName}>{puName}</div>
+        </div>
 
-      <div style={s.bonusBox}>
-        <h3 style={{ margin: '0 0 10px 0', color: '#10b981' }}>בונוס הוענק! 🎁</h3>
-        <div style={s.puName}>{powerUpNames[pu] || pu}</div>
-        <p style={{fontSize: '0.9rem', opacity: 0.8, marginTop: '10px'}}>נאגר עבורך לשימוש בשאלות הבאות</p>
+        <p style={s.subText}>המשחק יתחדש בעוד {timer} שניות...</p>
       </div>
-
-      <button onClick={handleNext} style={s.nextBtn}>המשך בטירוף 🚀</button>
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', textAlign: 'center' },
-  title: { fontSize: '3.5rem', fontWeight: '900', color: '#ffd700', margin: '0 0 10px 0' },
-  subtitle: { fontSize: '1.5rem', margin: '0 0 40px 0', opacity: 0.9 },
-  statsBox: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '20px 40px', marginBottom: '30px', border: '1px solid rgba(255,255,255,0.1)' },
-  stat: { fontSize: '1.2rem', fontWeight: 'bold' },
-  bonusBox: { backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '2px dashed #10b981', borderRadius: '20px', padding: '25px', marginBottom: '40px', width: '100%', maxWidth: '400px' },
-  puName: { fontSize: '1.5rem', fontWeight: 'bold', color: 'white', padding: '10px', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '10px' },
-  nextBtn: { width: '100%', maxWidth: '400px', height: '65px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer' }
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', alignItems: 'center', justifyContent: 'center' },
+  container: { width: '100%', maxWidth: '400px', backgroundColor: '#1a1d2e', borderRadius: '30px', padding: '40px 20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.2)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  icon: { fontSize: '5rem', marginBottom: '20px' },
+  title: { color: '#FF9100', fontSize: '3rem', fontWeight: '900', margin: '0 0 10px 0' },
+  text: { fontSize: '1.2rem', marginBottom: '30px', opacity: 0.9 },
+  puCard: { backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '20px', marginBottom: '30px' },
+  puLabel: { fontSize: '1rem', color: '#94a3b8', marginBottom: '10px' },
+  // שם הכוח זוהר בטורקיז
+  puName: { fontSize: '2.5rem', fontWeight: '900', color: '#00E5FF', textShadow: '0 0 10px rgba(0,229,255,0.5)' },
+  subText: { fontSize: '1rem', color: '#94a3b8' }
 };

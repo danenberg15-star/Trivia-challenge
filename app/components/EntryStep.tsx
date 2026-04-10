@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import Image from "next/image"; // יבוא רכיב התמונה של Next.js
 
 interface EntryStepProps {
   onJoin: (code: string, name: string) => Promise<boolean>;
@@ -47,9 +48,21 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
 
   return (
     <div style={s.layout}>
+      {/* כפתור הגביע המעודכן לצבעי הלוגו */}
       <button onClick={onViewHighscores} style={s.trophyBtn} title="טבלת שיאים">🏆</button>
       
-      <h1 style={s.title}>Trivia Time</h1>
+      {/* שילוב הלוגו בראש המסך */}
+      <div style={s.logoContainer}>
+        <Image 
+          src="/logo.webp" 
+          alt="Trivia Time Logo" 
+          width={250} 
+          height={150} 
+          priority 
+          style={{ objectFit: 'contain' }}
+        />
+      </div>
+
       <div style={s.form}>
         <input style={s.input} placeholder="שם שחקן" value={name} onChange={(e) => { setName(e.target.value); onSetName(e.target.value); }} disabled={loading} />
         
@@ -62,8 +75,10 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
           </div>
         </div>
 
+        {/* כפתור סולו מעודכן לטורקיז */}
         <button onClick={handleSolo} disabled={loading} style={s.soloBtn}>⏱️ משחק אישי (נגד הטיימר)</button>
         
+        {/* פריים קבוצתי מעודכן לכתום */}
         <div style={s.groupFrame}>
           <div style={s.groupLabel}>משחק קבוצתי ברשת</div>
           <button onClick={handleCreate} disabled={loading} style={s.primaryBtn}>{loading ? "מייצר חדר..." : "+ פתיחת חדר חדש"}</button>
@@ -76,22 +91,25 @@ export default function EntryStep({ onJoin, onCreate, onSetName, onViewHighscore
   );
 }
 
+// הגדרות סגנון מעודכנות לצבעי הלוגו
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', position: 'relative' },
-  trophyBtn: { position: 'absolute', top: '20px', right: '20px', fontSize: '2rem', background: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '50%', width: '60px', height: '60px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(255,215,0,0.2)', zIndex: 10, transition: 'transform 0.2s' },
-  title: { color: '#ffd700', fontSize: '3rem', fontWeight: '900', marginBottom: '20px' },
-  form: { width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '15px' },
-  input: { height: '55px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.2rem' },
-  settingsBlock: { backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' },
-  settingLabel: { fontSize: '0.9rem', color: '#ffd700', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' },
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', position: 'relative', overflowY: 'auto' },
+  trophyBtn: { position: 'absolute', top: '20px', right: '20px', fontSize: '2rem', background: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '50%', width: '60px', height: '60px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(255,145,0,0.2)', zIndex: 10, transition: 'transform 0.2s' },
+  logoContainer: { marginBottom: '30px', flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', maxWidth: '300px' },
+  form: { width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '15px', paddingBottom: '20px' },
+  input: { height: '55px', borderRadius: '15px', border: '1px solid rgba(0,229,255,0.3)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.2rem', transition: 'border-color 0.2s' },
+  settingsBlock: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '15px', border: '1px solid rgba(0,229,255,0.1)' },
+  settingLabel: { fontSize: '0.9rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' },
   toggles: { display: 'flex', gap: '8px' },
-  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #ffd700', backgroundColor: 'transparent', color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer' },
-  toggleBtnActive: { backgroundColor: '#ffd700', color: '#05081c' },
-  soloBtn: { height: '60px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' },
-  groupFrame: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.02)', position: 'relative', marginTop: '10px' },
-  groupLabel: { position: 'absolute', top: '-12px', right: '20px', backgroundColor: '#05081c', padding: '0 10px', color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold' },
-  inputSmall: { height: '45px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.1rem' },
-  primaryBtn: { height: '50px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer' },
-  secondaryBtn: { height: '45px', backgroundColor: 'transparent', color: '#ffd700', border: '2px solid #ffd700', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
+  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #FF9100', backgroundColor: 'transparent', color: '#FF9100', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  toggleBtnActive: { backgroundColor: '#FF9100', color: '#05081c' },
+  // צבע טורקיז (Teal) לסולו
+  soloBtn: { height: '60px', backgroundColor: '#00E5FF', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,229,255,0.3)', transition: 'transform 0.2s' },
+  // צבע כתום (Orange) לקבוצתי
+  groupFrame: { border: '2px solid rgba(255,145,0,0.3)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.01)', position: 'relative', marginTop: '10px' },
+  groupLabel: { position: 'absolute', top: '-12px', right: '20px', backgroundColor: '#05081c', padding: '0 10px', color: '#FF9100', fontSize: '0.9rem', fontWeight: 'bold' },
+  inputSmall: { height: '45px', borderRadius: '10px', border: '1px solid rgba(255,145,0,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.1rem' },
+  primaryBtn: { height: '50px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', transition: 'transform 0.2s' },
+  secondaryBtn: { height: '45px', backgroundColor: 'transparent', color: '#FF9100', border: '2px solid #FF9100', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', transition: 'all 0.2s' },
   divider: { textAlign: 'center', margin: '5px 0', opacity: 0.5, fontSize: '0.8rem' }
 };

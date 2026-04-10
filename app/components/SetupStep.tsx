@@ -96,7 +96,7 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
       {/* Header */}
       <div style={s.header}>
         <div style={{ fontSize: '1.2rem' }}>
-          קוד חדר: <span style={{ color: '#ffd700', fontWeight: '900', fontSize: '1.8rem' }}>{roomData.id}</span>
+          קוד חדר: <span style={{ color: '#FF9100', fontWeight: '900', fontSize: '1.8rem' }}>{roomData.id}</span>
         </div>
         <button onClick={handleWhatsAppShare} style={s.waBtn}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.415 0 12.051c0 2.12.553 4.189 1.601 6.01L0 24l6.135-1.61a11.815 11.815 0 005.912 1.583h.005c6.635 0 12.05-5.417 12.05-12.052a11.75 11.75 0 00-3.528-8.52z"/></svg>
@@ -129,7 +129,8 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
           return (
             <div key={tIdx} ref={el => { teamRefs.current[tIdx] = el; }} style={{
               ...s.teamBox,
-              ...(hoveredTeam === tIdx ? { borderColor: '#ffd700', backgroundColor: 'rgba(255,215,0,0.1)' } : {})
+              // הוספת הכתום כשמרחפים על הקבוצה
+              ...(hoveredTeam === tIdx ? { borderColor: '#FF9100', backgroundColor: 'rgba(255,145,0,0.1)' } : {})
             }}>
               <div style={s.teamHeader}>
                 {gameMode === "team" ? teamNames[tIdx] : "משתתפים"}
@@ -157,8 +158,8 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
         
         {/* כפתור יצירת קבוצה מופיע רק כשאין קבוצות ריקות */}
         {gameMode === "team" && numTeams < 4 && !hasEmptyTeam && (
-          <button onClick={handleAddTeam} style={{ ...s.teamBox, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>
-            <span style={{ fontSize: '2rem', color: '#ffd700' }}>+</span>
+          <button onClick={handleAddTeam} style={{ ...s.teamBox, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', borderColor: 'rgba(255,255,255,0.2)' }}>
+            <span style={{ fontSize: '2rem', color: '#FF9100' }}>+</span>
           </button>
         )}
       </div>
@@ -171,7 +172,7 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
 
       {/* Ghost Element for Dragging */}
       {draggedPlayer && (
-        <div ref={ghostRef} style={{ position: 'fixed', zIndex: 9999, pointerEvents: 'none', backgroundColor: '#ffd700', padding: '10px', borderRadius: '12px', color: '#05081c', fontWeight: 'bold', width: '100px', textAlign: 'center' }}>
+        <div ref={ghostRef} style={{ position: 'fixed', zIndex: 9999, pointerEvents: 'none', backgroundColor: '#00E5FF', padding: '10px', borderRadius: '12px', color: '#05081c', fontWeight: 'bold', width: '100px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,229,255,0.4)' }}>
           {draggedPlayer.name}
         </div>
       )}
@@ -185,15 +186,16 @@ const s: any = {
   waBtn: { background: '#25D366', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 },
   settingsBlock: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginBottom: '15px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '15px' },
   settingRow: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  settingLabel: { fontSize: '0.9rem', color: '#ffd700', fontWeight: 'bold' },
+  settingLabel: { fontSize: '0.9rem', color: '#FF9100', fontWeight: 'bold' },
   toggles: { display: 'flex', gap: '10px', width: '100%' },
-  toggleBtn: { flex: 1, height: '40px', borderRadius: '10px', border: '1px solid #ffd700', backgroundColor: 'transparent', color: '#ffd700', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
-  toggleBtnActive: { backgroundColor: '#ffd700', color: '#05081c' },
+  toggleBtn: { flex: 1, height: '40px', borderRadius: '10px', border: '1px solid #FF9100', backgroundColor: 'transparent', color: '#FF9100', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  toggleBtnActive: { backgroundColor: '#FF9100', color: '#05081c' },
   grid: { display: 'grid', gap: '10px', width: '100%', flex: 1, overflow: 'hidden' },
-  teamBox: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '15px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  teamHeader: { padding: '8px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ffd700', fontWeight: 'bold', fontSize: '1.1rem' },
-  playerCard: { backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', padding: '12px', margin: '5px', textAlign: 'center', color: 'white', fontWeight: 'bold' },
+  teamBox: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '15px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'all 0.2s' },
+  teamHeader: { padding: '8px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#FF9100', fontWeight: 'bold', fontSize: '1.1rem' },
+  // צבע הטורקיז של הלוגו לכרטיסיות השחקנים לניגודיות טובה
+  playerCard: { backgroundColor: 'rgba(0,229,255,0.1)', border: '1px solid #00E5FF', borderRadius: '10px', padding: '12px', margin: '5px', textAlign: 'center', color: 'white', fontWeight: 'bold', transition: 'transform 0.1s' },
   minusBtn: { backgroundColor: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px', margin: '5px auto', cursor: 'pointer', width: '80%' },
-  primaryBtn: { height: '60px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', width: '100%' },
-  disabledBtn: { height: '60px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'not-allowed', width: '100%' }
+  primaryBtn: { height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', width: '100%', boxShadow: '0 4px 15px rgba(255,145,0,0.3)', transition: 'transform 0.2s' },
+  disabledBtn: { height: '60px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'not-allowed', width: '100%' }
 };

@@ -104,9 +104,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const handleVote = (optIdx: number) => {
     if (isRevealing || isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
-    if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
-      myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
-    }
     updateRoom({ votes: newVotes });
   };
 
@@ -131,18 +128,20 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress * circumference);
 
-  const clockColor = isFrozen ? "#3b82f6" : (isSlowMo ? "#10b981" : "#ef4444");
+  // לוגיקת צבע טיימר מעודכנת לצבעי הלוגו
+  // קפוא: טורקיז (Teal), מואט: כתום (Orange), רגיל: אדוםUX (Danger)
+  const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#FF9100" : "#ef4444");
 
   return (
     <div style={s.layout}>
       
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
           <circle 
             cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" 
             strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 60 60)" 
-            style={{ transition: 'stroke-dashoffset 1s linear' }}
+            style={{ transition: 'stroke-dashoffset 1s linear', filter: `drop-shadow(0 0 5px ${clockColor})` }}
           />
         </svg>
         <div style={s.clockTime}>{timeLeft}</div>
@@ -168,22 +167,25 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>
-              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה. התשובות יחשפו בקרוב...
+              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה.
             </div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
               const isSelectedByMe = votes[userId] === i;
               
-              let bgColor = isSelectedByMe ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.05)';
-              let borderColor = isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)';
+              // הגדרות צבעי תשובות מעודכנות
+              let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.03)';
+              let borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
               
               if (isRevealing) {
                 if (i === question.correctIdx) {
-                  bgColor = 'rgba(16, 185, 129, 0.2)'; 
-                  borderColor = '#10b981';
+                  // נכון: טורקיז (Teal)
+                  bgColor = 'rgba(0, 229, 255, 0.15)'; 
+                  borderColor = '#00E5FF';
                 } else if (isSelectedByMe) {
-                  bgColor = 'rgba(239, 68, 68, 0.2)'; 
+                  // טעות: אדום (Red)
+                  bgColor = 'rgba(239, 68, 68, 0.15)'; 
                   borderColor = '#ef4444';
                 }
               }
@@ -196,14 +198,14 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
                 <div 
                   key={i} 
                   onClick={() => handleVote(i)}
-                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
+                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, transform: isSelectedByMe && !isRevealing ? 'scale(1.02)' : 'scale(1)' }}
                 >
-                  <span style={s.optionText}>{opt}</span>
+                  <span style={{...s.optionText, color: isRevealing && i === question.correctIdx ? '#00E5FF' : 'white'}}>{opt}</span>
                   
                   {!isIndividual && votersForThis.length > 0 && (
                     <div style={s.votersContainer}>
                       {votersForThis.map((p: any) => (
-                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color }} title={p.name} />
+                        <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} title={p.name} />
                       ))}
                     </div>
                   )}
@@ -215,6 +217,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       </div>
 
       <div style={s.footer}>
+        {/* כפתור סופי מעודכן לכתום */}
         <button 
           onClick={handleSubmit} 
           disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing || isFrozen}
@@ -233,19 +236,21 @@ const s: any = {
   clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '10px' },
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  // שינוי כאן: גלילה אופקית לכוחות
   powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '5px', flexShrink: 0, width: '100%' },
-  // שינוי כאן: פלקס-שרינק 0 כדי שהכפתורים לא יימעכו כשיש הרבה
-  puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', color: '#ffd700', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
-  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#ffd700', lineHeight: '1.4', margin: 0 },
+  // כוחות עזר מודגשים בכתום
+  puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '10px', color: '#FF9100', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
+  questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
+  // כותרת שאלה בכתום
+  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4', margin: 0 },
   optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 },
-  optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' },
+  optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', boxSizing: 'border-box' },
   optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  frozenBox: { backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '2px dashed #3b82f6', borderRadius: '15px', padding: '25px', color: '#3b82f6', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' },
+  // קופסת קיפאון בטורקיז
+  frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' },
   votersContainer: { display: 'flex', gap: '5px' },
   voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { width: '100%', maxWidth: '600px', padding: '10px 0', flexShrink: 0, boxSizing: 'border-box' },
-  submitBtn: { width: '100%', height: '65px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' },
-  submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed' }
+  // כפתור סופי בכתום
+  submitBtn: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' },
+  submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed' }
 };
