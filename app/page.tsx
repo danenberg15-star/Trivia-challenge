@@ -60,7 +60,14 @@ export default function TriviaApp() {
         )
       )}
 
-      {step === 4 && <CountdownStep timer={roomData?.preGameTimer || 3} />}
+      {step === 4 && (
+        <CountdownStep 
+          timer={roomData?.preGameTimer || 3} 
+          onComplete={() => {
+            updateRoom({ step: 5 });
+          }}
+        />
+      )}
       
       {step === 5 && roomData && (
         <GameStep 
@@ -77,10 +84,10 @@ export default function TriviaApp() {
           onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} 
         />
       )}
-
+      
       {step === 7 && roomData && (
         <VictoryStep 
-          winnerName={roomData.winnerName} 
+          winnerName={roomData.winnerName || "הקבוצה המנצחת"} 
           onRestart={restartGame} 
         />
       )}
