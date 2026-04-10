@@ -17,7 +17,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 15);
-  const [isRevealing, setIsRevealing] = useState(false);
   const [hasFailed, setHasFailed] = useState(false);
   
   // קריאת אפקטים מסונכרנים מהענן כדי שכל הקבוצה תראה את הכוח יחד
@@ -38,24 +37,23 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
-    setIsRevealing(false);
     setHasFailed(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
   useEffect(() => {
-    if (timeLeft <= 0 || isRevealing || isFrozen || hasFailed) return;
+    if (timeLeft <= 0 || isFrozen || hasFailed) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
-  }, [timeLeft, isRevealing, isFrozen, isSlowMo, hasFailed]);
+  }, [timeLeft, isFrozen, isSlowMo, hasFailed]);
 
   useEffect(() => {
-    if (timeLeft <= 0 && !hasFailed && !isRevealing) {
+    if (timeLeft <= 0 && !hasFailed) {
       setHasFailed(true);
       if (onDirectStepChange) onDirectStepChange(9); 
       else handleAnswer(false, 0, ""); 
     }
-  }, [timeLeft, hasFailed, isRevealing, onDirectStepChange, handleAnswer]);
+  }, [timeLeft, hasFailed, onDirectStepChange, handleAnswer]);
 
   const difficulty = roomData.difficulty || 'dynamic';
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
@@ -113,7 +111,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   };
 
   const handleVote = (optIdx: number) => {
-    if (isRevealing || isFrozen || hasFailed) return; 
+    if (isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
     
     // בוטים בקבוצה שלי מעתיקים אותי מיד (לצורכי QA)
@@ -129,7 +127,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
   useEffect(() => {
-    if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isRevealing && !isFrozen && !hasFailed) {
+    if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isFrozen && !hasFailed) {
       const botTimer = setTimeout(() => {
         const currentRoom = roomDataRef.current;
         if (currentRoom.step !== 5) return;
@@ -167,7 +165,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isRevealing, isFrozen, hasFailed, updateRoom, question.text]);
+  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, updateRoom, question.text]);
   // ------------------------------------------
 
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -177,10 +175,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const handleSubmit = () => {
     if (!allAgreed) return;
-    setIsRevealing(true);
-    setTimeout(() => {
-      handleAnswer(firstVote === question.correctIdx, timeLeft, question.text);
-    }, 1500);
+    // מעבר מיידי ללא חיווי או עיכוב
+    handleAnswer(firstVote === question.correctIdx, timeLeft, question.text);
   };
 
   const maxTime = 120;
@@ -207,7 +203,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       </div>
 
       <div style={s.contentArea}>
-        {myPowerUps.length > 0 && !isRevealing && (
+        {myPowerUps.length > 0 && (
           <div style={s.powerUpsContainer}>
             {myPowerUps.map((pu: string, i: number) => (
                <button key={i} onClick={() => handlePowerUpClick(pu)} style={s.puBtn}>
@@ -226,28 +222,23 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>
-              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה. התשובות יחשפו ברגע שהקרח יפשיר...
+              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה.
             </div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
               const isSelectedByMe = votes[userId] === i;
               
-              let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.03)';
-              let borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
-              
-              if (isRevealing) {
-                if (i === question.correctIdx) { bgColor = 'rgba(0, 229, 255, 0.15)'; borderColor = '#00E5FF'; } 
-                else if (isSelectedByMe) { bgColor = 'rgba(239, 68, 68, 0.15)'; borderColor = '#ef4444'; }
-              }
+              const bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.03)';
+              const borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
               
               if (hiddenOptions.includes(i)) {
                 return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }}><span style={s.optionText}>{opt}</span></div>;
               }
 
               return (
-                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, transform: isSelectedByMe && !isRevealing ? 'scale(1.02)' : 'scale(1)' }}>
-                  <span style={{...s.optionText, color: isRevealing && i === question.correctIdx ? '#00E5FF' : 'white'}}>{opt}</span>
+                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, transform: isSelectedByMe ? 'scale(1.02)' : 'scale(1)' }}>
+                  <span style={s.optionText}>{opt}</span>
                   {votersForThis.length > 0 && (
                     <div style={s.votersContainer}>
                       {votersForThis.map((p: any) => (
@@ -281,10 +272,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
         <button 
           onClick={handleSubmit} 
-          disabled={!allAgreed || isRevealing || isFrozen}
+          disabled={!allAgreed || isFrozen}
           style={allAgreed ? s.submitBtn : s.submitBtnDisabled}
         >
-          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה..."))}
+          {isFrozen ? "קפוא ❄️" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")}
         </button>
       </div>
 
