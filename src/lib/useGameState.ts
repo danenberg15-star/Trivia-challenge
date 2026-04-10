@@ -8,7 +8,6 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 15);
 };
 
-// רשימת מספרים זרים ל-100 כדי להבטיח פיזור אקראי מושלם ללא חזרות
 const coprimes = [7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97];
 
 export function useGameState() {
@@ -24,8 +23,7 @@ export function useGameState() {
     const savedId = localStorage.getItem('trivia_user_id') || generateId();
     localStorage.setItem('trivia_user_id', savedId);
     setUserId(savedId);
-    const savedName = localStorage.getItem('trivia_user_name') || '';
-    setUserName(savedName);
+    setUserName(localStorage.getItem('trivia_user_name') || '');
   }, []);
 
   useEffect(() => {
@@ -42,166 +40,81 @@ export function useGameState() {
   }, [roomId]);
 
   const updateRoom = (updates: any) => {
-    if (!roomId) return;
-    update(ref(db, `rooms/${roomId}`), updates);
-  };
-
-  const handleExit = () => {
-    setStep(2);
-    setRoomId('');
-    setRoomData(null);
+    if (roomId) update(ref(db, `rooms/${roomId}`), updates);
   };
 
   const handleCreateRoom = async (name: string) => {
-    try {
-      const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
-      const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; 
-      
-      const initialData = {
-        id: newRoomId,
-        creatorId: userId,
-        step: 3,
-        gameMode: 'team',
-        difficulty: 'dynamic', 
-        seed: seed,
-        players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
-        teamNames: ['קבוצה 1', 'קבוצה 2'],
-        timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, 
-        powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] }, 
-        currentQuestionIdx: 0,
-        soloQuestionCount: 0,
-        votes: null,
-        status: 'waiting'
-      };
-      await set(ref(db, `rooms/${newRoomId}`), initialData);
-      localStorage.setItem('trivia_user_name', name);
-      setRoomId(newRoomId);
-      setStep(3);
-    } catch (err: any) {
-      console.error(err);
-      throw new Error(err.message);
-    }
+    const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
+    const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+    await set(ref(db, `rooms/${newRoomId}`), {
+      id: newRoomId,
+      creatorId: userId,
+      step: 3,
+      gameMode: 'team',
+      difficulty: 'dynamic',
+      seed,
+      players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+      teamNames: ['קבוצה 1', 'קבוצה 2'],
+      timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
+      powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
+      currentQuestionIdx: 0,
+      votes: null
+    });
+    localStorage.setItem('trivia_user_name', name);
+    setRoomId(newRoomId);
   };
 
   const handleJoinRoom = async (code: string, name: string) => {
-    try {
-      const cleanCode = code.trim();
-      let roomKey = cleanCode;
-
-      if (cleanCode === 'עומר') {
-        roomKey = 'qa_omer_room';
-        const roomRef = ref(db, `rooms/${roomKey}`);
-        const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-
-        const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
-        const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-        const bots = botNames.map((bn, i) => ({
-          id: `bot-${i}`, name: bn, teamIdx: (i + 1) % 2, color: botColors[i], isBot: true
-        }));
-
-        const qaData = {
-          id: 'עומר',
-          creatorId: userId, 
-          step: 3,
-          gameMode: 'team',
-          difficulty: 'dynamic', 
-          seed: seed,
-          players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
-          teamNames: ['קבוצה 1', 'קבוצה 2'],
-          timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
-          powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
-          currentQuestionIdx: 0,
-          votes: null,
-          status: 'waiting'
-        };
-        await set(roomRef, qaData); 
-        
-        localStorage.setItem('trivia_user_name', name);
-        setRoomId(roomKey);
-        setStep(3);
-        return true;
+    const cleanCode = code.trim();
+    const roomRef = ref(db, `rooms/${cleanCode}`);
+    const snapshot = await get(roomRef);
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const players = data.players || [];
+      if (!players.find((p: any) => p.id === userId)) {
+        const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+        players.push({ id: userId, name, teamIdx: players.length % 2, color: colors[players.length % colors.length] });
+        await update(roomRef, { players });
       }
-
-      const roomRef = ref(db, `rooms/${cleanCode}`);
-      const snapshot = await get(roomRef);
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const players = data.players || [];
-        if (!players.find((p: any) => p.id === userId)) {
-          const colors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-          const playerColor = colors[players.length % colors.length];
-          players.push({ id: userId, name, teamIdx: players.length % 2, color: playerColor });
-          await update(roomRef, { players, step: data.step || 3 });
-        }
-        localStorage.setItem('trivia_user_name', name);
-        setRoomId(cleanCode);
-        setStep(data.step || 3);
-        return true;
-      }
-      return false;
-    } catch (err: any) {
-      console.error(err);
-      throw new Error(err.message);
+      localStorage.setItem('trivia_user_name', name);
+      setRoomId(cleanCode);
+      return true;
     }
+    return false;
   };
 
-  const handleAnswer = async (isCorrect: boolean, timeAtAnswer: number) => {
+  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number) => {
     if (!roomData || !roomId) return;
-    const isIndividual = roomData.gameMode === 'individual';
     const me = roomData.players.find((p: any) => p.id === userId);
-    const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
-    
-    let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
-    const newTime = timeAtAnswer + timeChange;
-    const newTimeBanks = { ...(roomData.timeBanks || {}), [key]: Math.max(0, newTime) };
+    const teamName = roomData.teamNames[me.teamIdx];
+    const newTime = Math.max(0, timeAtAnswer + (isCorrect ? 10 : -7));
+    const newTimeBanks = { ...(roomData.timeBanks || {}), [teamName]: newTime };
     const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
 
-    if (isIndividual) {
-      const newSoloCount = (roomData.soloQuestionCount || 0) + 1;
-      
-      if (newTime >= 60) {
-        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
-      } else if (newTime <= 0) {
-        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
-      } else if (newSoloCount % 5 === 0) {
-        // --- התיקון הקריטי: הגנה מפני מחיקת פיירבייס של מערכים ריקים ---
-        const powerUps = ['50:50', 'freeze', 'slow-mo'];
-        const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
-        const safePowerUpsObj = roomData.powerUps || {}; // מונע קריסה אם פיירבייס העלים את האובייקט
-        const currentPUs = safePowerUpsObj[key] || [];
-        
-        updateRoom({ 
-          timeBanks: newTimeBanks, 
-          powerUps: { ...safePowerUpsObj, [key]: [...currentPUs, randomPU] },
-          step: 8, 
-          soloQuestionCount: newSoloCount,
-          lastGrantedPowerUp: randomPU,
-          currentQuestionIdx: nextIdx,
-          votes: null 
-        });
-      } else {
-        // המשיכו רגיל לשאלה הבאה
-        updateRoom({ timeBanks: newTimeBanks, currentQuestionIdx: nextIdx, soloQuestionCount: newSoloCount, votes: null });
-      }
+    if (newTime >= 120) {
+      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: teamName });
+    } else if (newTime <= 0) {
+      updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over" });
+    } else if (nextIdx > 0 && nextIdx % 5 === 0) {
+      const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
+      const safePowerUpsObj = roomData.powerUps || {};
+      const currentPUs = safePowerUpsObj[teamName] || [];
+      updateRoom({ 
+        timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU,
+        currentQuestionIdx: nextIdx, votes: null,
+        powerUps: { ...safePowerUpsObj, [teamName]: [...currentPUs, randomPU] } 
+      });
     } else {
-      if (newTime >= 120) {
-        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
-      } else if (newTime <= 0) {
-        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
-      } else {
-        updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: null });
-      }
+      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null });
     }
   };
 
   const restartGame = () => {
-    const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; 
-    updateRoom({ step: 3, currentQuestionIdx: 0, soloQuestionCount: 0, seed: seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
+    const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
   };
 
-  return {
-    mounted, userId, roomId, roomData, step,
-    setStep: (s: number) => { setStep(s); if(roomId) updateRoom({ step: s }); },
-    updateRoom, handleCreateRoom, handleJoinRoom, setUserName, userName, handleAnswer, restartGame, handleExit
-  };
+  const handleExit = () => { setStep(2); setRoomId(''); setRoomData(null); };
+
+  return { mounted, userId, roomId, roomData, step, setStep, updateRoom, handleCreateRoom, handleJoinRoom, setUserName, handleAnswer, restartGame, handleExit };
 }

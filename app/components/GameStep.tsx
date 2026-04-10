@@ -13,7 +13,7 @@ const ALL_QUESTIONS = questionsData as QuestionType[];
 
 export default function GameStep({ roomData, userId, updateRoom, handleAnswer }: any) {
   const isIndividual = roomData.gameMode === "individual";
-  const me = roomData.players.find((p: any) => p.id === userId);
+  const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
   const myTeamPlayers = isIndividual ? [me] : roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
@@ -30,7 +30,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     setHiddenOptions([]);
     setIsFrozen(false);
     setIsSlowMo(false);
-  }, [roomData.currentQuestionIdx]);
+  }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
   useEffect(() => {
     if (timeLeft <= 0 || isRevealing || isFrozen) return;
@@ -64,20 +64,16 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
   const votes = roomData.votes || {};
 
-  const myPowerUps = Array.isArray(roomData.powerUps?.[myTeamName])
-    ? roomData.powerUps[myTeamName]
-    : Object.values(roomData.powerUps?.[myTeamName] || {});
+  const safePowerUpsObj = roomData.powerUps || {};
+  let myPowerUps = safePowerUpsObj[myTeamName] || [];
+  if (!Array.isArray(myPowerUps)) myPowerUps = Object.values(myPowerUps);
 
   const handlePowerUpClick = (pu: string) => {
-    const safePowerUpsObj = roomData.powerUps || {};
-    let currentPUs = safePowerUpsObj[myTeamName] || [];
-    if (!Array.isArray(currentPUs)) currentPUs = Object.values(currentPUs);
-    
+    let currentPUs = [...myPowerUps];
     const idx = currentPUs.indexOf(pu);
     if (idx > -1) {
-      const newPUs = [...currentPUs];
-      newPUs.splice(idx, 1);
-      updateRoom({ powerUps: { ...safePowerUpsObj, [myTeamName]: newPUs } });
+      currentPUs.splice(idx, 1);
+      updateRoom({ powerUps: { ...safePowerUpsObj, [myTeamName]: currentPUs } });
     }
 
     if (pu === '50:50') {
@@ -109,11 +105,10 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   const handleSubmit = () => {
     if (!isIndividual && !allAgreed) return;
     const finalAnswer = isIndividual ? votes[userId] : firstVote;
-    const isCorrect = finalAnswer === question.correctIdx;
     
     setIsRevealing(true);
     setTimeout(() => {
-      handleAnswer(isCorrect, timeLeft);
+      handleAnswer(finalAnswer === question.correctIdx, timeLeft);
     }, 1500);
   };
 
@@ -128,7 +123,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   return (
     <div style={s.layout}>
       
-      {/* 1. אזור עליון - השעון (נעוץ) */}
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
@@ -141,10 +135,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
         <div style={s.clockTime}>{timeLeft}</div>
       </div>
 
-      {/* 2. אזור מרכזי - תוכן דינמי נגלל (Scrollable) */}
       <div style={s.contentArea}>
-        
-        {/* כוחות */}
         {myPowerUps.length > 0 && !isRevealing && (
           <div style={s.powerUpsContainer}>
             {myPowerUps.map((pu: string, i: number) => (
@@ -157,12 +148,10 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
           </div>
         )}
 
-        {/* שאלות */}
         <div style={s.questionCard}>
           <h2 style={s.questionText}>{question.text}</h2>
         </div>
 
-        {/* תשובות */}
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>
@@ -197,6 +186,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
                   style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
                 >
                   <span style={s.optionText}>{opt}</span>
+                  
                   {!isIndividual && votersForThis.length > 0 && (
                     <div style={s.votersContainer}>
                       {votersForThis.map((p: any) => (
@@ -211,7 +201,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
         </div>
       </div>
 
-      {/* 3. אזור תחתון - כפתור "סופי" (נעוץ) */}
       <div style={s.footer}>
         <button 
           onClick={handleSubmit} 
