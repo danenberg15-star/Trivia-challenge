@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import questionsData from "../../src/lib/questions.json";
 
 interface QuestionType {
@@ -20,7 +20,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [isRevealing, setIsRevealing] = useState(false);
   const [hasFailed, setHasFailed] = useState(false);
   
-  // קריאת אפקטים מסונכרנים מהענן (Firebase) כדי שכולם יראו את אותו הכוח באותו הרגע
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
 
@@ -28,7 +27,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // טריגר מקומי לשחרור ההקפאה ברגע שהזמן עבר
   const [, setForceRender] = useState(0);
   useEffect(() => {
     if (isFrozen) {
@@ -62,7 +60,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
   const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
 
-  // אלגוריתם קושי דינמי מותאם ל-120 שניות
   let targetLevel = 1;
   if (difficulty === 'easy') {
     targetLevel = maxTimeInGame <= 60 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
@@ -87,15 +84,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   let myPowerUps = safePowerUpsObj[myTeamName] || [];
   if (!Array.isArray(myPowerUps)) myPowerUps = Object.values(myPowerUps);
 
-  // הפעלת כוח ושליחתו לענן כדי שכל הקבוצה תראה אותו
   const handlePowerUpClick = (pu: string) => {
     let currentPUs = [...myPowerUps];
     const idx = currentPUs.indexOf(pu);
     if (idx > -1) {
       currentPUs.splice(idx, 1);
-      
       let effectData: any = { type: pu, qIdx: roomData.currentQuestionIdx };
-      
       if (pu === '50:50') {
         const incorrects = [0, 1, 2, 3].filter(i => i !== question.correctIdx);
         incorrects.sort(() => Math.random() - 0.5);
@@ -103,7 +97,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       } else if (pu === 'freeze') {
         effectData.expiresAt = Date.now() + 10000;
       }
-
       updateRoom({ 
         powerUps: { ...safePowerUpsObj, [myTeamName]: currentPUs },
         teamEffects: { ...(roomData.teamEffects || {}), [myTeamName]: effectData }
@@ -115,13 +108,57 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     if (isRevealing || isFrozen || hasFailed) return; 
     let newVotes = { ...votes, [userId]: optIdx };
     
-    // סימולציית הצבעת בוטים לחדר QA
+    // בוטים בקבוצה שלי מצביעים מיד מה שאני מצביע
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
     
     updateRoom({ votes: newVotes });
   };
+
+  // --- לוגיקת צד השרת לבוטים היריבים בחדר QA (מופעלת מקומית) ---
+  const roomDataRef = useRef(roomData);
+  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
+
+  useEffect(() => {
+    if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isRevealing && !isFrozen && !hasFailed) {
+      // טיימר של 10 שניות
+      const botTimer = setTimeout(() => {
+        const currentRoom = roomDataRef.current;
+        if (currentRoom.step !== 5) return; // לא לבצע אם עברנו שאלה
+
+        const team2Name = currentRoom.teamNames[1];
+        // פעם יודעים, פעם טועים (מבוסס על אינדקס זוגי/אי-זוגי)
+        const isCorrect = currentRoom.currentQuestionIdx % 2 === 0;
+        
+        const currentOtherTime = currentRoom.timeBanks[team2Name] || 15;
+        const newTime = Math.max(0, currentOtherTime + (isCorrect ? 10 : -7));
+        const nextIdx = (currentRoom.currentQuestionIdx || 0) + 1;
+        
+        const newTimeBanks = { ...(currentRoom.timeBanks || {}), [team2Name]: newTime };
+
+        if (newTime >= 120) {
+          updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: team2Name });
+        } else if (newTime <= 0) {
+          updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over" });
+        } else if (nextIdx > 0 && nextIdx % 5 === 0) {
+          const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
+          const safePowerUpsObj = currentRoom.powerUps || {};
+          const currentPUs = safePowerUpsObj[team2Name] || [];
+          updateRoom({ 
+            timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU,
+            currentQuestionIdx: nextIdx, votes: null,
+            powerUps: { ...safePowerUpsObj, [team2Name]: [...currentPUs, randomPU] } 
+          });
+        } else {
+          updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null });
+        }
+      }, 10000); // 10 שניות בדיוק
+
+      return () => clearTimeout(botTimer);
+    }
+  }, [roomData.currentQuestionIdx, roomData.id, isRevealing, isFrozen, hasFailed, updateRoom]);
+  // -------------------------------------------------------------
 
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
   const allVoted = myTeamVotes.every((v: any) => v !== undefined);
@@ -216,7 +253,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       </div>
 
       <div style={s.footer}>
-        {/* מקרא השחקנים החי (Roster) */}
         <div style={s.rosterContainer}>
           <div style={s.rosterLabel}>סטטוס קבוצה:</div>
           <div style={s.rosterGrid}>
@@ -262,7 +298,6 @@ const s: any = {
   votersContainer: { display: 'flex', gap: '5px' },
   voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   
-  // Footer & Roster styling
   footer: { width: '100%', maxWidth: '600px', padding: '5px 0 10px 0', flexShrink: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' },
   rosterContainer: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '10px', border: '1px solid rgba(255,255,255,0.05)' },
   rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },

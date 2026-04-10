@@ -53,7 +53,7 @@ export function useGameState() {
       gameMode: 'team',
       difficulty: 'dynamic',
       seed,
-      players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
+      players: [{ id: userId, name, teamIdx: 0, color: '#00E5FF' }],
       teamNames: ['קבוצה 1', 'קבוצה 2'],
       timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
       powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
@@ -69,15 +69,22 @@ export function useGameState() {
     const roomRef = ref(db, `rooms/${cleanCode}`);
     const snapshot = await get(roomRef);
 
-    // בדיקה: אם החדר לא קיים
     if (!snapshot.exists()) {
-      // דלת אחורית ליצירת חדר QA באופן אוטומטי אם הוא נמחק
+      // חדר QA עם 7 בוטים!
       if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
         const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
         const myPlayer = { id: userId, name, teamIdx: 0, color: '#00E5FF' };
-        // יצירת הבוטים הווירטואליים שיצביעו אוטומטית לפי הקוד ב-GameStep
-        const bot1 = { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#FF9100', isBot: true };
-        const bot2 = { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#ef4444', isBot: true };
+        
+        // 3 בוטים בקבוצה שלי (צוות 0) - יצביעו בדיוק כמוני
+        const bot1 = { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true };
+        const bot2 = { id: 'bot_2', name: 'בוט גורי', teamIdx: 0, color: '#10b981', isBot: true };
+        const bot3 = { id: 'bot_3', name: 'בוט דודו', teamIdx: 0, color: '#34d399', isBot: true };
+        
+        // 4 בוטים בקבוצה היריבה (צוות 1) - עונים אוטומטית אחרי 10 שניות
+        const bot4 = { id: 'bot_4', name: 'בוט רוני', teamIdx: 1, color: '#FF9100', isBot: true };
+        const bot5 = { id: 'bot_5', name: 'בוט משה', teamIdx: 1, color: '#f59e0b', isBot: true };
+        const bot6 = { id: 'bot_6', name: 'בוט יוסי', teamIdx: 1, color: '#fbbf24', isBot: true };
+        const bot7 = { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true };
 
         await set(roomRef, {
           id: cleanCode,
@@ -86,10 +93,10 @@ export function useGameState() {
           gameMode: 'team',
           difficulty: 'dynamic',
           seed,
-          players: [myPlayer, bot1, bot2],
-          teamNames: ['קבוצת QA', 'קבוצה 2'],
-          timeBanks: { 'קבוצת QA': 15, 'קבוצה 2': 15 },
-          powerUps: { 'קבוצת QA': [], 'קבוצה 2': [] },
+          players: [myPlayer, bot1, bot2, bot3, bot4, bot5, bot6, bot7],
+          teamNames: ['קבוצת QA', 'הבוטים'],
+          timeBanks: { 'קבוצת QA': 15, 'הבוטים': 15 },
+          powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
           currentQuestionIdx: 0,
           votes: null
         });
@@ -97,10 +104,9 @@ export function useGameState() {
         setRoomId(cleanCode);
         return true;
       }
-      return false; // חדר רגיל שלא קיים יחזיר שגיאה כרגיל
+      return false; 
     }
 
-    // אם החדר קיים, הצטרפות רגילה
     const data = snapshot.val();
     const players = data.players || [];
     if (!players.find((p: any) => p.id === userId)) {
