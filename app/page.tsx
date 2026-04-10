@@ -28,13 +28,12 @@ export default function TriviaApp() {
       const me = roomData.players.find((p: any) => p.id === userId);
       
       if (nextIdx > 0 && nextIdx % 5 === 0) {
-        // הגענו לשאלה 5, 10, 15 וכו' -> צ'ק-פוינט וקבלת כוח
         const powers = ['50:50', 'freeze', 'slow-mo'];
         const randomPower = powers[Math.floor(Math.random() * powers.length)];
         const currentPUs = roomData.powerUps?.[me.name] || [];
         
         updateRoom({ 
-          step: 8, // עובר למסך ה-Checkpoint
+          step: 8, 
           currentQuestionIdx: nextIdx,
           votes: {},
           powerUps: { 
@@ -43,7 +42,6 @@ export default function TriviaApp() {
           } 
         });
       } else {
-        // דילוג ישיר לשאלה הבאה ללא הצגת מסך ניקוד
         updateRoom({ 
           step: 5, 
           currentQuestionIdx: nextIdx, 
@@ -70,6 +68,21 @@ export default function TriviaApp() {
   }, [mounted]);
 
   if (!mounted) return null;
+
+  // פונקציית עזר לאתחול מהיר במצב סולו
+  const handleSoloRestart = () => {
+    const me = roomData.players.find((p: any) => p.id === userId);
+    setIsSoloInitiated(true);
+    updateRoom({
+      step: 4,
+      preGameTimer: 3,
+      currentQuestionIdx: 0,
+      votes: {},
+      // מאפס את הטיימר ל-20 שניות ואת הכוחות
+      timeBanks: { [me.name]: 20 },
+      powerUps: { [me.name]: [] }
+    });
+  };
 
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
@@ -132,7 +145,6 @@ export default function TriviaApp() {
         />
       )}
 
-      {/* מסך הניקוד - יוצג רק במצב קבוצתי בגלל הדילוג ב-useEffect למעלה */}
       {step === 6 && roomData && (
         <ScoreStep 
           roomData={roomData} 
@@ -143,7 +155,14 @@ export default function TriviaApp() {
       {step === 7 && roomData && (
         <VictoryStep 
           winnerName={roomData.winnerName || "הקבוצה המנצחת"} 
-          onRestart={() => { setIsSoloInitiated(false); restartGame(); }} 
+          onRestart={() => {
+            if (roomData.gameMode === "individual") {
+              handleSoloRestart();
+            } else {
+              setIsSoloInitiated(false);
+              restartGame();
+            }
+          }} 
         />
       )}
 
@@ -156,7 +175,14 @@ export default function TriviaApp() {
       )}
 
       {step === 9 && (
-        <LoseStep onRestart={() => { setIsSoloInitiated(false); restartGame(); }} />
+        <LoseStep onRestart={() => {
+          if (roomData?.gameMode === "individual") {
+            handleSoloRestart();
+          } else {
+            setIsSoloInitiated(false);
+            restartGame();
+          }
+        }} />
       )}
     </main>
   );
