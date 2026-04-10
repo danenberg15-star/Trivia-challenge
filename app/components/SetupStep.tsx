@@ -1,96 +1,208 @@
 "use client";
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 export default function SetupStep({ roomData, userId, updateRoom, onStart }: any) {
-  const isCreator = roomData.creatorId === userId;
+  const [draggedPlayer, setDraggedPlayer] = useState<any>(null);
+  const [hoveredTeam, setHoveredTeam] = useState<number | null>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const teamRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  const toggleGameMode = () => {
-    if (!isCreator) return;
-    updateRoom({ gameMode: roomData.gameMode === 'team' ? 'individual' : 'team' });
+  const isAdmin = roomData.creatorId === userId;
+  const gameMode = roomData.gameMode || "team";
+  const difficulty = roomData.difficulty || "dynamic";
+  const players = roomData.players || [];
+  const teamNames = roomData.teamNames || ['קבוצה 1', 'קבוצה 2'];
+  const numTeams = teamNames.length;
+
+  useEffect(() => {
+    const preventDefault = (e: TouchEvent) => {
+      if (draggedPlayer) e.preventDefault();
+    };
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    return () => document.removeEventListener('touchmove', preventDefault);
+  }, [draggedPlayer]);
+
+  const HEBREW_LETTERS = ["א'", "ב'", "ג'", "ד'"];
+
+  const getNextTeamName = () => {
+    for (let letter of HEBREW_LETTERS) {
+      const nameToCheck = `קבוצה ${letter}`;
+      if (!teamNames.includes(nameToCheck)) return nameToCheck;
+    }
+    return `קבוצה ?`;
   };
 
-  const setDifficulty = (diff: string) => {
-    if (!isCreator) return;
-    updateRoom({ difficulty: diff });
+  const handleAddTeam = () => {
+    if (!isAdmin || numTeams >= 4) return;
+    const newNames = [...teamNames, getNextTeamName()];
+    const newTimeBanks = { ...roomData.timeBanks, [newNames[newNames.length - 1]]: 15 };
+    const newPowerUps = { ...roomData.powerUps, [newNames[newNames.length - 1]]: [] };
+    updateRoom({ teamNames: newNames, timeBanks: newTimeBanks, powerUps: newPowerUps });
   };
 
-  const shareRoom = () => {
-    const text = `בואו לשחק איתי ב-Trivia Time Challenge! הקוד הוא: ${roomData.id}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+  const handleRemoveTeam = (idx: number) => {
+    if (!isAdmin) return;
+    const newNames = [...teamNames];
+    newNames.splice(idx, 1);
+    const newPlayers = players.map((p: any) => p.teamIdx === idx ? { ...p, teamIdx: 0 } : (p.teamIdx > idx ? { ...p, teamIdx: p.teamIdx - 1 } : p));
+    updateRoom({ teamNames: newNames, players: newPlayers });
+  };
+
+  const handlePlayerMove = (pId: string, tIdx: number) => {
+    if (!isAdmin) return;
+    const newPlayers = players.map((p: any) => p.id === pId ? { ...p, teamIdx: tIdx } : p);
+    updateRoom({ players: newPlayers });
+  };
+
+  const hasEmptyTeam = Array.from({ length: numTeams }).some((_, i) =>
+    players.filter((p: any) => p.teamIdx === i).length === 0
+  );
+
+  const canStart = gameMode === "individual" ? players.length >= 1 : 
+    Array.from({ length: numTeams }).every((_, i) => players.filter((p: any) => p.teamIdx === i).length >= 2);
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!draggedPlayer || !isAdmin) return;
+    if (ghostRef.current) {
+      ghostRef.current.style.left = `${e.clientX - 60}px`;
+      ghostRef.current.style.top = `${e.clientY - 25}px`;
+    }
+    let found: number | null = null;
+    const count = gameMode === "team" ? numTeams : 1;
+    for (let i = 0; i < count; i++) {
+      const rect = teamRefs.current[i]?.getBoundingClientRect();
+      if (rect && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        found = i;
+        break;
+      }
+    }
+    if (found !== hoveredTeam) setHoveredTeam(found);
+  };
+
+  const handleWhatsAppShare = () => {
+    const shareUrl = `${window.location.origin}/?room=${roomData.id}`;
+    const text = `בואו לשחק איתי טריוויה צ'אלנג'! קוד החדר הוא: ${roomData.id} \n ${shareUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
-    <div style={s.layout}>
+    <div
+      style={s.layout}
+      onPointerMove={handlePointerMove}
+      onPointerUp={() => {
+        if (draggedPlayer && hoveredTeam !== null) handlePlayerMove(draggedPlayer.id, hoveredTeam);
+        setDraggedPlayer(null); setHoveredTeam(null);
+      }}
+    >
+      {/* Header */}
       <div style={s.header}>
-        <div style={s.roomIdLabel}>קוד חדר</div>
-        <div style={s.roomId} onClick={shareRoom}>{roomData.id} 🔗</div>
-      </div>
-
-      <div style={s.section}>
-        <div style={s.label}>סוג משחק</div>
-        <div style={s.toggleBar}>
-          <button 
-            onClick={toggleGameMode} 
-            style={{...s.toggleBtn, backgroundColor: roomData.gameMode === 'individual' ? '#ffd700' : 'transparent', color: roomData.gameMode === 'individual' ? '#05081c' : 'white'}}
-          >יחידים</button>
-          <button 
-            onClick={toggleGameMode} 
-            style={{...s.toggleBtn, backgroundColor: roomData.gameMode === 'team' ? '#ffd700' : 'transparent', color: roomData.gameMode === 'team' ? '#05081c' : 'white'}}
-          >קבוצות</button>
+        <div style={{ fontSize: '1.2rem' }}>
+          קוד חדר: <span style={{ color: '#ffd700', fontWeight: '900', fontSize: '1.8rem' }}>{roomData.id}</span>
         </div>
+        <button onClick={handleWhatsAppShare} style={s.waBtn}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.415 0 12.051c0 2.12.553 4.189 1.601 6.01L0 24l6.135-1.61a11.815 11.815 0 005.912 1.583h.005c6.635 0 12.05-5.417 12.05-12.052a11.75 11.75 0 00-3.528-8.52z"/></svg>
+        </button>
       </div>
 
-      <div style={s.section}>
-        <div style={s.label}>רמת קושי</div>
-        <div style={s.toggleBar}>
-          {['easy', 'medium', 'hard'].map(d => (
-            <button 
-              key={d} 
-              onClick={() => setDifficulty(d)} 
-              style={{...s.toggleBtn, flex: 1, backgroundColor: roomData.difficulty === d ? '#ffd700' : 'transparent', color: roomData.difficulty === d ? '#05081c' : 'white'}}
-            >
-              {d === 'easy' ? 'קל' : d === 'medium' ? 'בינוני' : 'קשה'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={s.playersList}>
-        <div style={s.label}>שחקנים בחדר ({roomData.players?.length || 0})</div>
-        <div style={s.listScroll}>
-          {roomData.players?.map((p: any) => (
-            <div key={p.id} style={s.playerItem}>
-              <div style={{...s.dot, backgroundColor: p.color}} />
-              <span>{p.name}</span>
-              {p.id === roomData.creatorId && <span style={s.adminTag}>מנהל</span>}
+      {/* Settings - לצוות המנהל בלבד */}
+      {isAdmin && (
+        <div style={s.settingsBlock}>
+          <div style={s.settingRow}>
+            <div style={s.settingLabel}>מצב משחק:</div>
+            <div style={s.toggles}>
+              <button onClick={() => updateRoom({ gameMode: 'individual' })} style={{ ...s.toggleBtn, ...(gameMode === "individual" ? s.toggleBtnActive : {}) }}>יחידים</button>
+              <button onClick={() => updateRoom({ gameMode: 'team' })} style={{ ...s.toggleBtn, ...(gameMode === "team" ? s.toggleBtnActive : {}) }}>קבוצות</button>
             </div>
-          ))}
+          </div>
+          <div style={s.settingRow}>
+            <div style={s.settingLabel}>רמת קושי:</div>
+            <div style={s.toggles}>
+              <button onClick={() => updateRoom({ difficulty: 'easy' })} style={{ ...s.toggleBtn, ...(difficulty === "easy" ? s.toggleBtnActive : {}) }}>קל</button>
+              <button onClick={() => updateRoom({ difficulty: 'dynamic' })} style={{ ...s.toggleBtn, ...((difficulty === "dynamic" || difficulty === "medium") ? s.toggleBtnActive : {}) }}>משתנה</button>
+              <button onClick={() => updateRoom({ difficulty: 'hard' })} style={{ ...s.toggleBtn, ...(difficulty === "hard" ? s.toggleBtnActive : {}) }}>קשה</button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Players Grid */}
+      <div style={{ ...s.grid, gridTemplateColumns: gameMode === "team" ? '1fr 1fr' : '1fr' }}>
+        {Array.from({ length: gameMode === "team" ? numTeams : 1 }).map((_, tIdx) => {
+          const teamPlayers = players.filter((p: any) => gameMode === "individual" || p.teamIdx === tIdx);
+          return (
+            <div key={tIdx} ref={el => { teamRefs.current[tIdx] = el; }} style={{
+              ...s.teamBox,
+              ...(hoveredTeam === tIdx ? { borderColor: '#ffd700', backgroundColor: 'rgba(255,215,0,0.1)' } : {})
+            }}>
+              <div style={s.teamHeader}>
+                {gameMode === "team" ? teamNames[tIdx] : "משתתפים"}
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {teamPlayers.map((p: any) => (
+                  <div
+                    key={p.id}
+                    onPointerDown={(e) => {
+                      if (!isAdmin) return;
+                      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+                      setDraggedPlayer(p);
+                    }}
+                    style={{ ...s.playerCard, cursor: isAdmin ? 'grab' : 'default' }}
+                  >
+                    {p.name} {p.id === userId ? "(את/ה)" : ""}
+                  </div>
+                ))}
+                {isAdmin && gameMode === "team" && numTeams > 2 && teamPlayers.length === 0 && (
+                  <button onClick={() => handleRemoveTeam(tIdx)} style={s.minusBtn}>- הסר קבוצה</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {isAdmin && gameMode === "team" && numTeams < 4 && !hasEmptyTeam && (
+          <button onClick={handleAddTeam} style={{ ...s.teamBox, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>
+            <span style={{ fontSize: '2rem', color: '#ffd700' }}>+</span>
+          </button>
+        )}
       </div>
 
-      {isCreator ? (
-        <button onClick={onStart} style={s.startBtn}>בואו נתחיל! 🚀</button>
-      ) : (
-        <div style={s.waitingMsg}>ממתינים למנהל שיתחיל...</div>
+      {/* Footer */}
+      <div style={{ width: '100%', marginTop: '10px' }}>
+        {isAdmin ? (
+          <>
+            {!canStart && gameMode === "team" && <p style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', margin: '5px 0' }}>לפחות 2 שחקנים בכל קבוצה כדי להתחיל</p>}
+            <button onClick={onStart} disabled={!canStart} style={canStart ? s.primaryBtn : s.disabledBtn}>בואו נשחק! 🚀</button>
+          </>
+        ) : (
+          <div style={s.waitingText}>ממתינים למנהל החדר שיתחיל את המשחק... ⏳</div>
+        )}
+      </div>
+
+      {/* Ghost Element for Dragging */}
+      {draggedPlayer && (
+        <div ref={ghostRef} style={{ position: 'fixed', zIndex: 9999, pointerEvents: 'none', backgroundColor: '#ffd700', padding: '10px', borderRadius: '12px', color: '#05081c', fontWeight: 'bold', width: '100px', textAlign: 'center' }}>
+          {draggedPlayer.name}
+        </div>
       )}
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl' },
-  header: { textAlign: 'center', marginBottom: '30px', marginTop: '20px' },
-  roomIdLabel: { opacity: 0.6, fontSize: '0.9rem' },
-  roomId: { fontSize: '3rem', fontWeight: '900', color: '#ffd700', cursor: 'pointer' },
-  section: { marginBottom: '25px' },
-  label: { marginBottom: '10px', fontWeight: 'bold', fontSize: '1.1rem' },
-  toggleBar: { display: 'flex', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '15px', padding: '5px', border: '1px solid rgba(255,255,255,0.1)' },
-  toggleBtn: { flex: 1, height: '45px', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' },
-  playersList: { flex: 1, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '25px', padding: '20px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
-  listScroll: { overflowY: 'auto', flex: 1 },
-  playerItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' },
-  dot: { width: '12px', height: '12px', borderRadius: '50%' },
-  adminTag: { fontSize: '0.7rem', backgroundColor: '#ffd700', color: '#05081c', padding: '2px 8px', borderRadius: '10px', marginRight: 'auto', fontWeight: 'bold' },
-  startBtn: { height: '60px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '20px', fontSize: '1.4rem', fontWeight: '900', cursor: 'pointer', marginTop: '20px', boxShadow: '0 10px 20px rgba(255,215,0,0.2)' },
-  waitingMsg: { textAlign: 'center', padding: '20px', opacity: 0.6, fontStyle: 'italic' }
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', boxSizing: 'border-box', touchAction: 'none', userSelect: 'none', overflow: 'hidden' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '15px', width: '100%' },
+  waBtn: { background: '#25D366', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 },
+  settingsBlock: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginBottom: '15px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '15px' },
+  settingRow: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  settingLabel: { fontSize: '0.9rem', color: '#ffd700', fontWeight: 'bold' },
+  toggles: { display: 'flex', gap: '10px', width: '100%' },
+  toggleBtn: { flex: 1, height: '40px', borderRadius: '10px', border: '1px solid #ffd700', backgroundColor: 'transparent', color: '#ffd700', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
+  toggleBtnActive: { backgroundColor: '#ffd700', color: '#05081c' },
+  grid: { display: 'grid', gap: '10px', width: '100%', flex: 1, overflow: 'hidden' },
+  teamBox: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '15px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  teamHeader: { padding: '8px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ffd700', fontWeight: 'bold', fontSize: '1.1rem' },
+  playerCard: { backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid #ffd700', borderRadius: '10px', padding: '12px', margin: '5px', textAlign: 'center', color: 'white', fontWeight: 'bold' },
+  minusBtn: { backgroundColor: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px', margin: '5px auto', cursor: 'pointer', width: '80%' },
+  primaryBtn: { height: '60px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', width: '100%' },
+  disabledBtn: { height: '60px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'not-allowed', width: '100%' },
+  waitingText: { textAlign: 'center', color: '#ffd700', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '10px', padding: '15px', backgroundColor: 'rgba(255,215,0,0.1)', borderRadius: '15px' }
 };
