@@ -8,8 +8,9 @@ import EntryStep from "./components/EntryStep";
 import SetupStep from "./components/SetupStep";
 import CountdownStep from "./components/CountdownStep";
 import GameStep from "./components/GameStep";
-import MultiplayerGameStep from "./components/MultiplayerGameStep"; 
+import MultiplayerGameStep from "./components/MultiplayerGameStep";
 import ScoreStep from "./components/ScoreStep";
+import MultiplayerScoreStep from "./components/MultiplayerScoreStep"; // הייבוא החדש למסך ה-N+1
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
 import LoseStep from "./components/LoseStep";
@@ -122,7 +123,7 @@ export default function TriviaApp() {
         setLocalStep(8); 
       } else {
         setLocalRoomData(updatedData);
-        setLocalStep(5); 
+        setLocalStep(6); // עובר למסך תוצאות
       }
     } else {
       handleFbAnswer(isCorrect, timeAtAnswer, questionText);
@@ -148,6 +149,7 @@ export default function TriviaApp() {
       {currentStep === 2 && <EntryStep onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} onCreate={handleCreate} onSetName={setUserName} onViewHighscores={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}
       {currentStep === 3 && activeData && <SetupStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onStart={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} />}
       {currentStep === 4 && <CountdownStep timer={activeData?.preGameTimer || 3} onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} />}
+      
       {currentStep === 5 && activeData && (
         isSolo ? (
           <GameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} onDirectStepChange={handleDirectStepChange} />
@@ -155,7 +157,16 @@ export default function TriviaApp() {
           <MultiplayerGameStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} handleAnswer={onAnswer} onDirectStepChange={handleDirectStepChange} />
         )
       )}
-      {currentStep === 6 && activeData && <ScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 5, currentQuestionIdx: activeData.currentQuestionIdx })} />}
+      
+      {/* ניתוב חכם למסך התוצאות (Step 6) */}
+      {currentStep === 6 && activeData && (
+        isSolo ? (
+          <ScoreStep roomData={activeData} onNext={() => setLocalStep(5)} />
+        ) : (
+          <MultiplayerScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} />
+        )
+      )}
+
       {currentStep === 7 && activeData && <VictoryStep winnerName={activeData.winnerName || "מנצח"} onRestart={onRestart} />}
       {currentStep === 8 && activeData && <CheckpointStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onComplete={() => isSolo ? setLocalStep(5) : updateActiveRoom({ step: 5 })} />}
       {currentStep === 9 && <LoseStep onRestart={onRestart} />}
