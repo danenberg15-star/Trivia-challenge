@@ -18,7 +18,7 @@ export default function TriviaApp() {
 
   const wakeLockRef = useRef<any>(null);
 
-  // לוגיקה למעבר אוטומטי מסולו למשחק
+  // לוגיקה שמדלגת על ה-Setup במקרה של סולו
   useEffect(() => {
     if (step === 3 && roomData?.gameMode === "individual") {
       updateRoom({ step: 4, preGameTimer: 3 });
@@ -61,34 +61,27 @@ export default function TriviaApp() {
       {step === 2 && (
         <EntryStep 
           onJoin={handleJoinRoom} 
-          onCreate={async (name, isSolo) => {
+          onCreate={async (name, isSolo, diff) => {
             await handleCreateRoom(name);
-            // אם זה סולו, נעדכן מיד את ה-mode ל-individual ב-Firestore
-            if (isSolo) {
-              updateRoom({ gameMode: 'individual' });
-            } else {
-              updateRoom({ gameMode: 'team' });
-            }
+            updateRoom({ 
+              gameMode: isSolo ? 'individual' : 'team',
+              difficulty: diff 
+            });
           }} 
           onSetName={setUserName} 
         />
       )}
 
-      {/* שלב 3 יופיע רק אם זה משחק קבוצתי */}
       {step === 3 && (
         !roomData ? (
-          <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען חדר... ⏱️</div>
+          <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
         ) : (
-          roomData.gameMode === "team" ? (
-            <SetupStep 
-              roomData={roomData} 
-              userId={userId} 
-              updateRoom={updateRoom} 
-              onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
-            />
-          ) : (
-            <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>מתכונן למשחק סולו... 🚀</div>
-          )
+          <SetupStep 
+            roomData={roomData} 
+            userId={userId} 
+            updateRoom={updateRoom} 
+            onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
+          />
         )
       )}
 

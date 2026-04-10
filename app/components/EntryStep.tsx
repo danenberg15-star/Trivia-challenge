@@ -3,13 +3,14 @@ import React, { useState } from "react";
 
 interface EntryStepProps {
   onJoin: (code: string, name: string) => Promise<boolean>;
-  onCreate: (name: string, isSolo?: boolean) => Promise<void>;
+  onCreate: (name: string, isSolo: boolean, difficulty: string) => Promise<void>;
   onSetName: (name: string) => void;
 }
 
 export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProps) {
   const [name, setName] = useState("");
   const [inputCode, setInputCode] = useState("");
+  const [difficulty, setDifficulty] = useState("dynamic");
   const [loading, setLoading] = useState(false);
 
   const validateName = () => {
@@ -23,8 +24,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
   const handleSolo = async () => {
     if (!validateName()) return;
     setLoading(true);
-    // מייצר חדר עם דגל Solo כדי לדלג על ה-Setup ב-page.tsx
-    await onCreate(name, true);
+    await onCreate(name, true, difficulty);
     setLoading(false);
   };
 
@@ -32,7 +32,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
     if (!validateName()) return;
     setLoading(true);
     try {
-      await onCreate(name, false);
+      await onCreate(name, false, difficulty);
     } catch (e: any) {
       alert("שגיאה ביצירת חדר: " + (e.message || "נסה שוב"));
     }
@@ -65,9 +65,19 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           disabled={loading}
         />
 
+        {/* בחירת רמת קושי */}
+        <div style={s.settingsBlock}>
+          <div style={s.settingLabel}>רמת קושי למשחק:</div>
+          <div style={s.toggles}>
+            <button onClick={() => setDifficulty('easy')} style={{ ...s.toggleBtn, ...(difficulty === "easy" ? s.toggleBtnActive : {}) }}>קל</button>
+            <button onClick={() => setDifficulty('dynamic')} style={{ ...s.toggleBtn, ...(difficulty === "dynamic" ? s.toggleBtnActive : {}) }}>משתנה</button>
+            <button onClick={() => setDifficulty('hard')} style={{ ...s.toggleBtn, ...(difficulty === "hard" ? s.toggleBtnActive : {}) }}>קשה</button>
+          </div>
+        </div>
+
         {/* אופציה 1: סולו */}
         <button onClick={handleSolo} disabled={loading} style={s.soloBtn}>
-           ⏱️ משחק מהיר (יחיד)
+           ⏱️ נראה אותך מנצח את הטיימר
         </button>
 
         {/* אופציה 2: קבוצתי בתוך מסגרת */}
@@ -97,15 +107,20 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl' },
-  title: { color: '#ffd700', fontSize: '3.5rem', fontWeight: '900', marginBottom: '30px', textShadow: '0 0 20px rgba(255,215,0,0.3)' },
-  form: { width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '15px' },
-  input: { height: '60px', borderRadius: '15px', border: '2px solid rgba(255,215,0,0.3)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.4rem', marginBottom: '10px' },
-  soloBtn: { height: '65px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' },
-  groupFrame: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'rgba(255,255,255,0.02)', position: 'relative', marginTop: '10px' },
+  layout: { display: 'flex', flexDirection: 'column', minHeight: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl' },
+  title: { color: '#ffd700', fontSize: '3.5rem', fontWeight: '900', marginBottom: '20px', textShadow: '0 0 20px rgba(255,215,0,0.3)', textAlign: 'center' },
+  form: { width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  input: { height: '60px', borderRadius: '15px', border: '2px solid rgba(255,215,0,0.3)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.4rem' },
+  settingsBlock: { backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' },
+  settingLabel: { fontSize: '0.9rem', color: '#ffd700', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' },
+  toggles: { display: 'flex', gap: '8px' },
+  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #ffd700', backgroundColor: 'transparent', color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer' },
+  toggleBtnActive: { backgroundColor: '#ffd700', color: '#05081c' },
+  soloBtn: { height: '65px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16,185,129,0.3)', marginTop: '5px' },
+  groupFrame: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.02)', position: 'relative', marginTop: '10px' },
   groupLabel: { position: 'absolute', top: '-12px', right: '20px', backgroundColor: '#05081c', padding: '0 10px', color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold' },
   inputSmall: { height: '45px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', textAlign: 'center', fontSize: '1.1rem' },
   primaryBtn: { height: '50px', backgroundColor: '#ffd700', color: '#05081c', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer' },
   secondaryBtn: { height: '45px', backgroundColor: 'transparent', color: '#ffd700', border: '2px solid #ffd700', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
-  divider: { textAlign: 'center', fontSize: '0.8rem', opacity: 0.5, margin: '5px 0' }
+  divider: { textAlign: 'center', fontSize: '0.8rem', opacity: 0.5, margin: '2px 0' }
 };

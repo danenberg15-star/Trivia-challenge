@@ -7,7 +7,6 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   const ghostRef = useRef<HTMLDivElement>(null);
   const teamRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  const difficulty = roomData.difficulty || "dynamic";
   const players = roomData.players || [];
   const teamNames = roomData.teamNames || ['קבוצה א\'', 'קבוצה ב\''];
   const numTeams = teamNames.length;
@@ -83,17 +82,6 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
         </button>
       </div>
 
-      <div style={s.settingsBlock}>
-        <div style={s.settingRow}>
-          <div style={s.settingLabel}>רמת קושי לחדר:</div>
-          <div style={s.toggles}>
-            <button onClick={() => updateRoom({ difficulty: 'easy' })} style={{ ...s.toggleBtn, ...(difficulty === "easy" ? s.toggleBtnActive : {}) }}>קל</button>
-            <button onClick={() => updateRoom({ difficulty: 'dynamic' })} style={{ ...s.toggleBtn, ...(difficulty === "dynamic" ? s.toggleBtnActive : {}) }}>משתנה</button>
-            <button onClick={() => updateRoom({ difficulty: 'hard' })} style={{ ...s.toggleBtn, ...(difficulty === "hard" ? s.toggleBtnActive : {}) }}>קשה</button>
-          </div>
-        </div>
-      </div>
-
       <div style={s.grid}>
         {Array.from({ length: numTeams }).map((_, tIdx) => {
           const teamPlayers = players.filter((p: any) => p.teamIdx === tIdx);
@@ -128,14 +116,8 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
 
 const s: any = {
   layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', boxSizing: 'border-box', touchAction: 'none', userSelect: 'none', overflow: 'hidden' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '10px', width: '100%' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '20px', width: '100%' },
   waBtn: { background: '#25D366', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 },
-  settingsBlock: { width: '100%', marginBottom: '10px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '15px', boxSizing: 'border-box' },
-  settingRow: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  settingLabel: { fontSize: '0.8rem', color: '#ffd700', fontWeight: 'bold' },
-  toggles: { display: 'flex', gap: '8px', width: '100%' },
-  toggleBtn: { flex: 1, height: '35px', borderRadius: '8px', border: '1px solid #ffd700', backgroundColor: 'transparent', color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer' },
-  toggleBtnActive: { backgroundColor: '#ffd700', color: '#05081c' },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%', flex: 1, overflow: 'hidden' },
   teamBox: { border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   teamHeader: { padding: '5px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ffd700', fontWeight: 'bold', fontSize: '0.9rem' },

@@ -10,7 +10,7 @@ export default function RulesStep({ onStart }: { onStart: () => void }) {
         <div style={s.scrollArea}>
           <section style={s.section}>
             <h2 style={s.subTitle}>1. הזמן הוא המטרה</h2>
-            <p style={s.text}>מתחילים עם 20 שניות. המטרה היא למלא את השעון ולהגיע ל-120 שניות או להיות האחרונים ששורדים.</p>
+            <p style={s.text}>מתחילים עם 20 שניות. המטרה היא למלא את הטיימר או להיות האחרונים ששורדים.</p>
           </section>
 
           <section style={s.section}>
