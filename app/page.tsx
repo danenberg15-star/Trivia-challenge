@@ -24,17 +24,18 @@ export default function TriviaApp() {
   useEffect(() => {
     if (step === 6 && roomData?.gameMode === "individual") {
       const currentIdx = roomData.currentQuestionIdx || 0;
-      const nextIdx = currentIdx + 1;
+      const finishedCount = currentIdx + 1; // כמה שאלות ענינו עד עכשיו
       const me = roomData.players.find((p: any) => p.id === userId);
       
-      if (nextIdx > 0 && nextIdx % 5 === 0) {
+      if (finishedCount > 0 && finishedCount % 5 === 0) {
+        // הגענו לשאלה 5, 10 וכו' -> צ'ק-פוינט וקבלת כוח
         const powers = ['50:50', 'freeze', 'slow-mo'];
         const randomPower = powers[Math.floor(Math.random() * powers.length)];
         const currentPUs = roomData.powerUps?.[me.name] || [];
         
         updateRoom({ 
           step: 8, 
-          currentQuestionIdx: nextIdx,
+          currentQuestionIdx: finishedCount,
           votes: {},
           powerUps: { 
             ...roomData.powerUps, 
@@ -42,9 +43,10 @@ export default function TriviaApp() {
           } 
         });
       } else {
+        // דילוג ישיר לשאלה הבאה
         updateRoom({ 
           step: 5, 
-          currentQuestionIdx: nextIdx, 
+          currentQuestionIdx: finishedCount, 
           votes: {} 
         });
       }
@@ -69,7 +71,6 @@ export default function TriviaApp() {
 
   if (!mounted) return null;
 
-  // פונקציית עזר לאתחול מהיר במצב סולו
   const handleSoloRestart = () => {
     const me = roomData.players.find((p: any) => p.id === userId);
     setIsSoloInitiated(true);
@@ -78,7 +79,6 @@ export default function TriviaApp() {
       preGameTimer: 3,
       currentQuestionIdx: 0,
       votes: {},
-      // מאפס את הטיימר ל-20 שניות ואת הכוחות
       timeBanks: { [me.name]: 20 },
       powerUps: { [me.name]: [] }
     });
@@ -145,24 +145,24 @@ export default function TriviaApp() {
         />
       )}
 
+      {/* שומר סף: במצב סולו, מסך הניקוד לא ירונדר לעולם */}
       {step === 6 && roomData && (
-        <ScoreStep 
-          roomData={roomData} 
-          onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} 
-        />
+        roomData.gameMode === "individual" ? (
+          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'white'}}>
+             <h2 style={{color: '#ffd700'}}>מעולה! ממשיכים... 🚀</h2>
+          </div>
+        ) : (
+          <ScoreStep 
+            roomData={roomData} 
+            onNext={() => updateRoom({ step: 5, currentQuestionIdx: (roomData.currentQuestionIdx || 0) + 1 })} 
+          />
+        )
       )}
       
       {step === 7 && roomData && (
         <VictoryStep 
           winnerName={roomData.winnerName || "הקבוצה המנצחת"} 
-          onRestart={() => {
-            if (roomData.gameMode === "individual") {
-              handleSoloRestart();
-            } else {
-              setIsSoloInitiated(false);
-              restartGame();
-            }
-          }} 
+          onRestart={() => roomData.gameMode === "individual" ? handleSoloRestart() : (setIsSoloInitiated(false), restartGame())} 
         />
       )}
 
@@ -175,14 +175,7 @@ export default function TriviaApp() {
       )}
 
       {step === 9 && (
-        <LoseStep onRestart={() => {
-          if (roomData?.gameMode === "individual") {
-            handleSoloRestart();
-          } else {
-            setIsSoloInitiated(false);
-            restartGame();
-          }
-        }} />
+        <LoseStep onRestart={() => roomData?.gameMode === "individual" ? handleSoloRestart() : (setIsSoloInitiated(false), restartGame())} />
       )}
     </main>
   );
