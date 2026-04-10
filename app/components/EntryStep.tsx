@@ -65,7 +65,6 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           disabled={loading}
         />
 
-        {/* בחירת רמת קושי */}
         <div style={s.settingsBlock}>
           <div style={s.settingLabel}>רמת קושי למשחק:</div>
           <div style={s.toggles}>
@@ -83,7 +82,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
           <div style={s.groupLabel}>משחק קבוצתי</div>
           
           <button onClick={handleCreate} disabled={loading} style={s.primaryBtn}>
-            {loading ? "מייצר חדר..." : "+ פתיחת חדר חדש"}
+            {loading ? "מייצר..." : "+ פתיחת חדר חדש"}
           </button>
           
           <div style={s.divider}>או הצטרפות לקיים:</div>
@@ -96,7 +95,7 @@ export default function EntryStep({ onJoin, onCreate, onSetName }: EntryStepProp
             disabled={loading}
           />
           <button onClick={handleJoin} disabled={loading} style={s.secondaryBtn}>
-            {loading ? "מתחבר..." : "הצטרפות"}
+            הצטרפות
           </button>
         </div>
       </div>

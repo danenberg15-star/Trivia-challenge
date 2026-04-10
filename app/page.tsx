@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameState } from "../src/lib/useGameState"; 
 import RulesStep from "./components/RulesStep"; 
 import EntryStep from "./components/EntryStep";
@@ -17,6 +17,8 @@ export default function TriviaApp() {
   } = useGameState();
 
   const wakeLockRef = useRef<any>(null);
+  // דגל מקומי למניעת קפיצה ל-Setup במשחק יחיד
+  const [isSoloPending, setIsSoloPending] = useState(false);
 
   useEffect(() => {
     const requestWakeLock = async () => {
@@ -34,6 +36,11 @@ export default function TriviaApp() {
     };
   }, [mounted]);
 
+  // לוגיקה שמנקה את הדגל כשמתחילים
+  useEffect(() => {
+    if (step === 4 || step === 5) setIsSoloPending(false);
+  }, [step]);
+
   if (!mounted) return null;
 
   return (
@@ -41,9 +48,8 @@ export default function TriviaApp() {
       
       {step >= 3 && (
         <button 
-          onClick={handleExit} 
+          onClick={() => { setIsSoloPending(false); handleExit(); }} 
           style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          title="צא מהחדר"
         >
           ✕
         </button>
@@ -55,8 +61,8 @@ export default function TriviaApp() {
         <EntryStep 
           onJoin={handleJoinRoom} 
           onCreate={async (name, isSolo, diff) => {
+            if (isSolo) setIsSoloPending(true); // חסימה מיידית של SetupStep
             await handleCreateRoom(name);
-            // הגדרה ראשונית קריטית: אם סולו, עוברים ישר ל-4. אם קבוצתי, ל-3.
             updateRoom({ 
               gameMode: isSolo ? 'individual' : 'team',
               difficulty: diff,
@@ -69,29 +75,26 @@ export default function TriviaApp() {
       )}
 
       {step === 3 && (
-        !roomData ? (
+        isSoloPending || roomData?.gameMode === "individual" ? (
+          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'white'}}>
+            <h2 style={{color: '#ffd700', fontSize: '1.8rem'}}>נערך למשחק... ⏱️</h2>
+          </div>
+        ) : !roomData ? (
           <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
         ) : (
-          // שומר הסף: מציג את ה-Setup רק אם אנחנו במצב קבוצתי
-          roomData.gameMode === "team" ? (
-            <SetupStep 
-              roomData={roomData} 
-              userId={userId} 
-              updateRoom={updateRoom} 
-              onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
-            />
-          ) : (
-            <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>מתכוננים לטיימר... 🚀</div>
-          )
+          <SetupStep 
+            roomData={roomData} 
+            userId={userId} 
+            updateRoom={updateRoom} 
+            onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
+          />
         )
       )}
 
       {step === 4 && (
         <CountdownStep 
           timer={roomData?.preGameTimer || 3} 
-          onComplete={() => {
-            updateRoom({ step: 5 });
-          }}
+          onComplete={() => updateRoom({ step: 5 })}
         />
       )}
       
@@ -114,7 +117,7 @@ export default function TriviaApp() {
       {step === 7 && roomData && (
         <VictoryStep 
           winnerName={roomData.winnerName || "הקבוצה המנצחת"} 
-          onRestart={restartGame} 
+          onRestart={() => { setIsSoloPending(false); restartGame(); }} 
         />
       )}
 
