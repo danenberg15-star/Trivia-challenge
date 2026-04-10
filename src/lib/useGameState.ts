@@ -55,7 +55,7 @@ export function useGameState() {
   const handleCreateRoom = async (name: string) => {
     try {
       const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
-      const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; // הגרלת סדר שאלות חכם
+      const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; 
       
       const initialData = {
         id: newRoomId,
@@ -70,7 +70,7 @@ export function useGameState() {
         powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] }, 
         currentQuestionIdx: 0,
         soloQuestionCount: 0,
-        votes: {},
+        votes: null,
         status: 'waiting'
       };
       await set(ref(db, `rooms/${newRoomId}`), initialData);
@@ -111,7 +111,7 @@ export function useGameState() {
           timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
           powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
           currentQuestionIdx: 0,
-          votes: {},
+          votes: null,
           status: 'waiting'
         };
         await set(roomRef, qaData); 
@@ -153,7 +153,7 @@ export function useGameState() {
     
     let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
     const newTime = timeAtAnswer + timeChange;
-    const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
+    const newTimeBanks = { ...(roomData.timeBanks || {}), [key]: Math.max(0, newTime) };
     const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
 
     if (isIndividual) {
@@ -164,23 +164,24 @@ export function useGameState() {
       } else if (newTime <= 0) {
         updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
       } else if (newSoloCount % 5 === 0) {
-        // מסך בונוס כל 5 שאלות
+        // --- התיקון הקריטי: הגנה מפני מחיקת פיירבייס של מערכים ריקים ---
         const powerUps = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
-        const currentPUs = roomData.powerUps[key] || [];
+        const safePowerUpsObj = roomData.powerUps || {}; // מונע קריסה אם פיירבייס העלים את האובייקט
+        const currentPUs = safePowerUpsObj[key] || [];
         
         updateRoom({ 
           timeBanks: newTimeBanks, 
-          powerUps: { ...roomData.powerUps, [key]: [...currentPUs, randomPU] },
+          powerUps: { ...safePowerUpsObj, [key]: [...currentPUs, randomPU] },
           step: 8, 
           soloQuestionCount: newSoloCount,
           lastGrantedPowerUp: randomPU,
           currentQuestionIdx: nextIdx,
-          votes: {} 
+          votes: null 
         });
       } else {
-        // המשיכו רגיל לשאלה הבאה (שלב נשאר 5)
-        updateRoom({ timeBanks: newTimeBanks, currentQuestionIdx: nextIdx, soloQuestionCount: newSoloCount, votes: {} });
+        // המשיכו רגיל לשאלה הבאה
+        updateRoom({ timeBanks: newTimeBanks, currentQuestionIdx: nextIdx, soloQuestionCount: newSoloCount, votes: null });
       }
     } else {
       if (newTime >= 120) {
@@ -188,15 +189,14 @@ export function useGameState() {
       } else if (newTime <= 0) {
         updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
       } else {
-        // קבוצתי עובר תמיד למסך N+1
-        updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: {} });
+        updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: null });
       }
     }
   };
 
   const restartGame = () => {
-    const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; // ערבוב חדש בריסטארט
-    updateRoom({ step: 3, currentQuestionIdx: 0, soloQuestionCount: 0, seed: seed, votes: {}, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
+    const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; 
+    updateRoom({ step: 3, currentQuestionIdx: 0, soloQuestionCount: 0, seed: seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
   };
 
   return {
