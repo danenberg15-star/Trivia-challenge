@@ -7,7 +7,6 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
   const ghostRef = useRef<HTMLDivElement>(null);
   const teamRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  const gameMode = roomData.gameMode || "team";
   const difficulty = roomData.difficulty || "dynamic";
   const players = roomData.players || [];
   const teamNames = roomData.teamNames || ['קבוצה 1', 'קבוצה 2'];
@@ -56,9 +55,8 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
     players.filter((p: any) => p.teamIdx === i).length === 0
   );
 
-  // שינינו למינימום 1 בכל קבוצה (היה 2)
-  const canStart = gameMode === "individual" ? players.length >= 1 : 
-    Array.from({ length: numTeams }).every((_, i) => players.filter((p: any) => p.teamIdx === i).length >= 1);
+  // חובה לפחות שחקן 1 בכל קבוצה כדי להתחיל
+  const canStart = Array.from({ length: numTeams }).every((_, i) => players.filter((p: any) => p.teamIdx === i).length >= 1);
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!draggedPlayer) return;
@@ -67,8 +65,7 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
       ghostRef.current.style.top = `${e.clientY - 25}px`;
     }
     let found: number | null = null;
-    const count = gameMode === "team" ? numTeams : 1;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < numTeams; i++) {
       const rect = teamRefs.current[i]?.getBoundingClientRect();
       if (rect && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
         found = i;
@@ -103,15 +100,8 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
         </button>
       </div>
 
-      {/* Settings Block - חשוף לכולם */}
+      {/* Settings Block - עכשיו מכיל רק את רמת הקושי */}
       <div style={s.settingsBlock}>
-        <div style={s.settingRow}>
-          <div style={s.settingLabel}>מצב משחק:</div>
-          <div style={s.toggles}>
-            <button onClick={() => updateRoom({ gameMode: 'individual' })} style={{ ...s.toggleBtn, ...(gameMode === "individual" ? s.toggleBtnActive : {}) }}>יחידים</button>
-            <button onClick={() => updateRoom({ gameMode: 'team' })} style={{ ...s.toggleBtn, ...(gameMode === "team" ? s.toggleBtnActive : {}) }}>קבוצות</button>
-          </div>
-        </div>
         <div style={s.settingRow}>
           <div style={s.settingLabel}>רמת קושי:</div>
           <div style={s.toggles}>
@@ -123,17 +113,16 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
       </div>
 
       {/* Players Grid */}
-      <div style={{ ...s.grid, gridTemplateColumns: gameMode === "team" ? '1fr 1fr' : '1fr' }}>
-        {Array.from({ length: gameMode === "team" ? numTeams : 1 }).map((_, tIdx) => {
-          const teamPlayers = players.filter((p: any) => gameMode === "individual" || p.teamIdx === tIdx);
+      <div style={s.grid}>
+        {Array.from({ length: numTeams }).map((_, tIdx) => {
+          const teamPlayers = players.filter((p: any) => p.teamIdx === tIdx);
           return (
             <div key={tIdx} ref={el => { teamRefs.current[tIdx] = el; }} style={{
               ...s.teamBox,
-              // הוספת הכתום כשמרחפים על הקבוצה
               ...(hoveredTeam === tIdx ? { borderColor: '#FF9100', backgroundColor: 'rgba(255,145,0,0.1)' } : {})
             }}>
               <div style={s.teamHeader}>
-                {gameMode === "team" ? teamNames[tIdx] : "משתתפים"}
+                {teamNames[tIdx]}
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 {teamPlayers.map((p: any) => (
@@ -148,7 +137,7 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
                     {p.name} {p.id === userId ? "(את/ה)" : ""}
                   </div>
                 ))}
-                {gameMode === "team" && numTeams > 2 && teamPlayers.length === 0 && (
+                {numTeams > 2 && teamPlayers.length === 0 && (
                   <button onClick={() => handleRemoveTeam(tIdx)} style={s.minusBtn}>- הסר קבוצה</button>
                 )}
               </div>
@@ -156,17 +145,16 @@ export default function SetupStep({ roomData, userId, updateRoom, onStart }: any
           );
         })}
         
-        {/* כפתור יצירת קבוצה מופיע רק כשאין קבוצות ריקות */}
-        {gameMode === "team" && numTeams < 4 && !hasEmptyTeam && (
+        {numTeams < 4 && !hasEmptyTeam && (
           <button onClick={handleAddTeam} style={{ ...s.teamBox, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', borderColor: 'rgba(255,255,255,0.2)' }}>
             <span style={{ fontSize: '2rem', color: '#FF9100' }}>+</span>
           </button>
         )}
       </div>
 
-      {/* Footer - חשוף וזמין לכולם */}
+      {/* Footer */}
       <div style={{ width: '100%', marginTop: '10px' }}>
-        {!canStart && gameMode === "team" && <p style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', margin: '5px 0' }}>לפחות שחקן 1 בכל קבוצה כדי להתחיל</p>}
+        {!canStart && <p style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', margin: '5px 0' }}>לפחות שחקן 1 בכל קבוצה כדי להתחיל</p>}
         <button onClick={onStart} disabled={!canStart} style={canStart ? s.primaryBtn : s.disabledBtn}>בואו נשחק! 🚀</button>
       </div>
 
@@ -190,10 +178,9 @@ const s: any = {
   toggles: { display: 'flex', gap: '10px', width: '100%' },
   toggleBtn: { flex: 1, height: '40px', borderRadius: '10px', border: '1px solid #FF9100', backgroundColor: 'transparent', color: '#FF9100', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
   toggleBtnActive: { backgroundColor: '#FF9100', color: '#05081c' },
-  grid: { display: 'grid', gap: '10px', width: '100%', flex: 1, overflow: 'hidden' },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', flex: 1, overflow: 'hidden' },
   teamBox: { border: '2px solid rgba(255,255,255,0.1)', borderRadius: '15px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'all 0.2s' },
   teamHeader: { padding: '8px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#FF9100', fontWeight: 'bold', fontSize: '1.1rem' },
-  // צבע הטורקיז של הלוגו לכרטיסיות השחקנים לניגודיות טובה
   playerCard: { backgroundColor: 'rgba(0,229,255,0.1)', border: '1px solid #00E5FF', borderRadius: '10px', padding: '12px', margin: '5px', textAlign: 'center', color: 'white', fontWeight: 'bold', transition: 'transform 0.1s' },
   minusBtn: { backgroundColor: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px', margin: '5px auto', cursor: 'pointer', width: '80%' },
   primaryBtn: { height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', width: '100%', boxShadow: '0 4px 15px rgba(255,145,0,0.3)', transition: 'transform 0.2s' },
