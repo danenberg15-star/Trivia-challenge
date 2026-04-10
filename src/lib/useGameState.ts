@@ -8,6 +8,9 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 15);
 };
 
+// רשימת מספרים זרים ל-100 כדי להבטיח פיזור אקראי מושלם ללא חזרות
+const coprimes = [7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97];
+
 export function useGameState() {
   const [mounted, setMounted] = useState(false);
   const [userId, setUserId] = useState<string>('');
@@ -43,15 +46,24 @@ export function useGameState() {
     update(ref(db, `rooms/${roomId}`), updates);
   };
 
+  const handleExit = () => {
+    setStep(2);
+    setRoomId('');
+    setRoomData(null);
+  };
+
   const handleCreateRoom = async (name: string) => {
     try {
       const newRoomId = Math.floor(1000 + Math.random() * 9000).toString();
+      const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; // הגרלת סדר שאלות חכם
+      
       const initialData = {
         id: newRoomId,
         creatorId: userId,
         step: 3,
         gameMode: 'team',
         difficulty: 'dynamic', 
+        seed: seed,
         players: [{ id: userId, name, teamIdx: 0, color: '#3b82f6' }],
         teamNames: ['קבוצה 1', 'קבוצה 2'],
         timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, 
@@ -79,7 +91,8 @@ export function useGameState() {
       if (cleanCode === 'עומר') {
         roomKey = 'qa_omer_room';
         const roomRef = ref(db, `rooms/${roomKey}`);
-        
+        const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+
         const botNames = ['בוט ספורט', 'בוט היסטוריה', 'בוט מדע', 'בוט מוזיקה', 'בוט סרטים'];
         const botColors = ['#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         const bots = botNames.map((bn, i) => ({
@@ -92,6 +105,7 @@ export function useGameState() {
           step: 3,
           gameMode: 'team',
           difficulty: 'dynamic', 
+          seed: seed,
           players: [...bots, { id: userId, name, teamIdx: 0, color: '#3b82f6' }],
           teamNames: ['קבוצה 1', 'קבוצה 2'],
           timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
@@ -131,7 +145,6 @@ export function useGameState() {
     }
   };
 
-  // התיקון: handleAnswer עכשיו מקבל את הזמן האמיתי שנשאר בשעון באותו רגע
   const handleAnswer = async (isCorrect: boolean, timeAtAnswer: number) => {
     if (!roomData || !roomId) return;
     const isIndividual = roomData.gameMode === 'individual';
@@ -139,27 +152,56 @@ export function useGameState() {
     const key = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
     
     let timeChange = isIndividual ? (isCorrect ? 5 : -2) : (isCorrect ? 10 : -7);
-    
-    // מוסיפים את הבונוס/קנס לזמן שנותר בפועל!
     const newTime = timeAtAnswer + timeChange;
     const newTimeBanks = { ...roomData.timeBanks, [key]: Math.max(0, newTime) };
+    const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
 
-    if (newTime >= (isIndividual ? 60 : 120)) {
-      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
-    } else if (newTime <= 0) {
-      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" }); // הפסד
+    if (isIndividual) {
+      const newSoloCount = (roomData.soloQuestionCount || 0) + 1;
+      
+      if (newTime >= 60) {
+        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
+      } else if (newTime <= 0) {
+        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
+      } else if (newSoloCount % 5 === 0) {
+        // מסך בונוס כל 5 שאלות
+        const powerUps = ['50:50', 'freeze', 'slow-mo'];
+        const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
+        const currentPUs = roomData.powerUps[key] || [];
+        
+        updateRoom({ 
+          timeBanks: newTimeBanks, 
+          powerUps: { ...roomData.powerUps, [key]: [...currentPUs, randomPU] },
+          step: 8, 
+          soloQuestionCount: newSoloCount,
+          lastGrantedPowerUp: randomPU,
+          currentQuestionIdx: nextIdx,
+          votes: {} 
+        });
+      } else {
+        // המשיכו רגיל לשאלה הבאה (שלב נשאר 5)
+        updateRoom({ timeBanks: newTimeBanks, currentQuestionIdx: nextIdx, soloQuestionCount: newSoloCount, votes: {} });
+      }
     } else {
-      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: {} });
+      if (newTime >= 120) {
+        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: key });
+      } else if (newTime <= 0) {
+        updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: "Game Over" });
+      } else {
+        // קבוצתי עובר תמיד למסך N+1
+        updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, votes: {} });
+      }
     }
   };
 
   const restartGame = () => {
-    updateRoom({ step: 3, currentQuestionIdx: 0, votes: {}, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
+    const seed = coprimes[Math.floor(Math.random() * coprimes.length)]; // ערבוב חדש בריסטארט
+    updateRoom({ step: 3, currentQuestionIdx: 0, soloQuestionCount: 0, seed: seed, votes: {}, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 } });
   };
 
   return {
     mounted, userId, roomId, roomData, step,
     setStep: (s: number) => { setStep(s); if(roomId) updateRoom({ step: s }); },
-    updateRoom, handleCreateRoom, handleJoinRoom, setUserName, userName, handleAnswer, restartGame
+    updateRoom, handleCreateRoom, handleJoinRoom, setUserName, userName, handleAnswer, restartGame, handleExit
   };
 }

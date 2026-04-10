@@ -8,11 +8,12 @@ import CountdownStep from "./components/CountdownStep";
 import GameStep from "./components/GameStep";
 import ScoreStep from "./components/ScoreStep";
 import VictoryStep from "./components/VictoryStep";
+import CheckpointStep from "./components/CheckpointStep";
 
 export default function TriviaApp() {
   const { 
     mounted, userId, roomId, roomData, step, setStep, updateRoom,
-    handleCreateRoom, handleJoinRoom, setUserName, handleAnswer, restartGame
+    handleCreateRoom, handleJoinRoom, setUserName, handleAnswer, restartGame, handleExit
   } = useGameState();
 
   const wakeLockRef = useRef<any>(null);
@@ -36,7 +37,19 @@ export default function TriviaApp() {
   if (!mounted) return null;
 
   return (
-    <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden' }}>
+    <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
+      
+      {/* כפתור יציאה גלובלי - מופיע רק מתוך החדר */}
+      {step >= 3 && (
+        <button 
+          onClick={handleExit} 
+          style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="צא מהחדר"
+        >
+          ✕
+        </button>
+      )}
+
       {step === 1 && <RulesStep onStart={() => setStep(2)} />}
       
       {step === 2 && (
@@ -89,6 +102,15 @@ export default function TriviaApp() {
         <VictoryStep 
           winnerName={roomData.winnerName || "הקבוצה המנצחת"} 
           onRestart={restartGame} 
+        />
+      )}
+
+      {/* המסך החדש עבור הסולו בלבד - כל 5 שאלות */}
+      {step === 8 && roomData && (
+        <CheckpointStep
+          roomData={roomData}
+          userId={userId}
+          updateRoom={updateRoom}
         />
       )}
     </main>

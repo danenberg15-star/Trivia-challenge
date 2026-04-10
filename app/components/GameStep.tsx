@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
-// ייבוא מאגר השאלות המלא מהקובץ שיצרנו
 import questionsData from "../../src/lib/questions.json";
 
-// הגדרת המבנה המדויק של שאלה כדי למנוע שגיאות TypeScript
 interface QuestionType {
   level: number;
   text: string;
@@ -19,60 +17,56 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
   const myTeamPlayers = isIndividual ? [me] : roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
-  // טיימר דינמי - מתחיל מבנק השניות העדכני של הקבוצה
-  const initialTime = roomData.timeBanks[myTeamName] || 15;
-  const [timeLeft, setTimeLeft] = useState(initialTime);
+  const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 15);
+  const [isRevealing, setIsRevealing] = useState(false);
 
-  // ספירה לאחור של השעון
+  // סנכרון זמן מחדש אם עברנו שאלה בסולו בלי לעזוב את המסך
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    const t = setInterval(() => {
-      setTimeLeft((prev: number) => prev - 1);
-    }, 1000);
-    return () => clearInterval(t);
-  }, [timeLeft]);
+    setTimeLeft(roomData.timeBanks[myTeamName] || 15);
+    setIsRevealing(false);
+  }, [roomData.currentQuestionIdx]);
 
-  // --- לוגיקת בחירת השאלות ורמת הקושי (אפיון 2.4) ---
+  useEffect(() => {
+    if (timeLeft <= 0 || isRevealing) return;
+    const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), 1000);
+    return () => clearInterval(t);
+  }, [timeLeft, isRevealing]);
+
   const difficulty = roomData.difficulty || 'dynamic';
-  // מוצאים את הזמן הגבוה ביותר כדי לסנכרן את רמת הקושי לכולם באופן שווה
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
   const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
 
   let targetLevel = 1;
   if (difficulty === 'easy') {
-    targetLevel = maxTimeInGame <= 40 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); // משלב 1 ו-2
+    targetLevel = maxTimeInGame <= 40 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
   } else if (difficulty === 'hard') {
     targetLevel = maxTimeInGame <= 30 ? 3 : 4;
   } else {
-    // Dynamic (ברירת מחדל)
     if (maxTimeInGame <= 20) targetLevel = 1;
     else if (maxTimeInGame <= 40) targetLevel = 2;
     else if (maxTimeInGame <= 55) targetLevel = 3;
     else targetLevel = 4;
   }
 
-  // סינון שאלות לפי הרמה המבוקשת ובחירה דטרמיניסטית לפי מספר השאלה הנוכחי
   const levelQuestions = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
-  const availableQuestions = levelQuestions.length > 0 ? levelQuestions : ALL_QUESTIONS; // גיבוי למקרה חירום
-  const qIdx = (roomData.currentQuestionIdx || 0) % availableQuestions.length;
+  const availableQuestions = levelQuestions.length > 0 ? levelQuestions : ALL_QUESTIONS; 
+  
+  // אלגוריתם ערבוב שאלות אחיד (Pseudo-Random)
+  const seed = roomData.seed || 37;
+  const qIdx = ((roomData.currentQuestionIdx || 0) * seed + 11) % availableQuestions.length;
   const question: QuestionType = availableQuestions[qIdx];
 
   const votes = roomData.votes || {};
 
   const handleVote = (optIdx: number) => {
+    if (isRevealing) return; // לא ניתן לשנות בזמן חשיפה
     let newVotes = { ...votes, [userId]: optIdx };
-    
-    // לוגיקת סנכרון בוטים לחדר ה-QA של עומר - מצביעים יחד איתך מיד!
     if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
-      myTeamPlayers.forEach((p: any) => {
-        if (p.isBot) newVotes[p.id] = optIdx;
-      });
+      myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
-    
     updateRoom({ votes: newVotes });
   };
 
-  // בדיקה האם כל חברי הקבוצה שלי הצביעו (ותנאי ללחיצה על סופי)
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
   const allVoted = myTeamVotes.every((v: any) => v !== undefined);
   const firstVote = myTeamVotes[0];
@@ -83,11 +77,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     const finalAnswer = isIndividual ? votes[userId] : firstVote;
     const isCorrect = finalAnswer === question.correctIdx;
     
-    // שולחים לשרת את התשובה יחד עם הזמן שנשאר לנו בפועל!
-    handleAnswer(isCorrect, timeLeft);
+    // משהים 1.5 שניות, מציגים נכון/לא נכון ואז ממשיכים
+    setIsRevealing(true);
+    setTimeout(() => {
+      handleAnswer(isCorrect, timeLeft);
+    }, 1500);
   };
 
-  // חישובי ה-Athlete Clock הגרפי (מעגל אדום)
   const maxTime = isIndividual ? 60 : 120;
   const progress = Math.min(Math.max(timeLeft / maxTime, 0), 1);
   const radius = 60;
@@ -96,19 +92,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
   return (
     <div style={s.layout}>
-      {/* Athlete Clock UI */}
       <div style={s.clockContainer}>
         <svg width="150" height="150" viewBox="0 0 150 150">
           <circle cx="75" cy="75" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="10" />
           <circle 
-            cx="75" cy="75" r={radius} 
-            fill="none" 
-            stroke="#ef4444" 
-            strokeWidth="10" 
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            transform="rotate(-90 75 75)" 
+            cx="75" cy="75" r={radius} fill="none" stroke="#ef4444" strokeWidth="10" 
+            strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 75 75)" 
             style={{ transition: 'stroke-dashoffset 1s linear' }}
           />
         </svg>
@@ -124,18 +113,27 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
           const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
           const isSelectedByMe = votes[userId] === i;
           
+          let bgColor = isSelectedByMe ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.05)';
+          let borderColor = isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)';
+          
+          // לוגיקת צבעי החשיפה המיידית
+          if (isRevealing) {
+            if (i === question.correctIdx) {
+              bgColor = 'rgba(16, 185, 129, 0.2)'; // ירוק לתשובה נכונה
+              borderColor = '#10b981';
+            } else if (isSelectedByMe) {
+              bgColor = 'rgba(239, 68, 68, 0.2)'; // אדום אם בחרת טעות
+              borderColor = '#ef4444';
+            }
+          }
+          
           return (
             <div 
               key={i} 
               onClick={() => handleVote(i)}
-              style={{
-                ...s.optionBtn,
-                borderColor: isSelectedByMe ? '#ffd700' : 'rgba(255,255,255,0.2)',
-                backgroundColor: isSelectedByMe ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.05)'
-              }}
+              style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
             >
               <span style={s.optionText}>{opt}</span>
-              
               {!isIndividual && votersForThis.length > 0 && (
                 <div style={s.votersContainer}>
                   {votersForThis.map((p: any) => (
@@ -148,13 +146,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
         })}
       </div>
 
-      {/* כפתור סופי */}
       <button 
         onClick={handleSubmit} 
-        disabled={isIndividual ? votes[userId] === undefined : !allAgreed}
+        disabled={(isIndividual ? votes[userId] === undefined : !allAgreed) || isRevealing}
         style={(isIndividual ? votes[userId] !== undefined : allAgreed) ? s.submitBtn : s.submitBtnDisabled}
       >
-        {isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה בקבוצה...")}
+        {isRevealing ? "בודק..." : (isIndividual ? "סופי!" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה..."))}
       </button>
     </div>
   );
@@ -162,7 +159,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
 const s: any = {
   layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', alignItems: 'center' },
-  clockContainer: { position: 'relative', width: '150px', height: '150px', margin: '20px auto', display: 'flex', justifyContent: 'center', alignItems: 'center' },
+  clockContainer: { position: 'relative', width: '150px', height: '150px', margin: '10px auto', display: 'flex', justifyContent: 'center', alignItems: 'center' },
   clockTime: { position: 'absolute', fontSize: '3.5rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   questionCard: { width: '100%', maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '20px', padding: '30px 20px', textAlign: 'center', marginBottom: '30px', border: '1px solid rgba(255,255,255,0.1)' },
   questionText: { fontSize: '1.5rem', fontWeight: 'bold', color: '#ffd700', lineHeight: '1.4' },
@@ -171,6 +168,6 @@ const s: any = {
   optionText: { fontSize: '1.2rem', fontWeight: 'bold' },
   votersContainer: { display: 'flex', gap: '5px' },
   voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
-  submitBtn: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', marginTop: '20px', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' },
-  submitBtnDisabled: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed', marginTop: '20px' }
+  submitBtn: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', marginTop: '10px', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' },
+  submitBtnDisabled: { width: '100%', maxWidth: '600px', height: '65px', backgroundColor: '#334155', color: '#94a3b8', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed', marginTop: '10px' }
 };
