@@ -56,20 +56,13 @@ export default function TriviaApp() {
           onJoin={handleJoinRoom} 
           onCreate={async (name, isSolo, diff) => {
             await handleCreateRoom(name);
-            // אם זה משחק יחידים, אנחנו קובעים את השלב ישירות ל-4 (ספירה לאחור) כדי לדלג על ה-Setup
-            if (isSolo) {
-              updateRoom({ 
-                gameMode: 'individual',
-                difficulty: diff,
-                step: 4,
-                preGameTimer: 3
-              });
-            } else {
-              updateRoom({ 
-                gameMode: 'team',
-                difficulty: diff 
-              });
-            }
+            // הגדרה ראשונית קריטית: אם סולו, עוברים ישר ל-4. אם קבוצתי, ל-3.
+            updateRoom({ 
+              gameMode: isSolo ? 'individual' : 'team',
+              difficulty: diff,
+              step: isSolo ? 4 : 3,
+              preGameTimer: isSolo ? 3 : 0
+            });
           }} 
           onSetName={setUserName} 
         />
@@ -79,12 +72,17 @@ export default function TriviaApp() {
         !roomData ? (
           <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
         ) : (
-          <SetupStep 
-            roomData={roomData} 
-            userId={userId} 
-            updateRoom={updateRoom} 
-            onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
-          />
+          // שומר הסף: מציג את ה-Setup רק אם אנחנו במצב קבוצתי
+          roomData.gameMode === "team" ? (
+            <SetupStep 
+              roomData={roomData} 
+              userId={userId} 
+              updateRoom={updateRoom} 
+              onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
+            />
+          ) : (
+            <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>מתכוננים לטיימר... 🚀</div>
+          )
         )
       )}
 
