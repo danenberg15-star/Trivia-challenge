@@ -1,14 +1,17 @@
 "use client";
 import React, { useState, useEffect } from "react";
+// ייבוא מאגר השאלות המלא מהקובץ שיצרנו
+import questionsData from "../../src/lib/questions.json";
 
-// שאלות דמו כדי שיהיה למשחק מאיפה למשוך (עד שנחבר את הקובץ המלא)
-const MOCK_QUESTIONS = [
-  { text: "כמה יבשות יש בעולם?", options: ["5", "6", "7", "8"], correctIdx: 2 },
-  { text: "מי הגיבור הראשי במשחק מריו?", options: ["שרברב", "נגר", "חשמלאי", "שוטר"], correctIdx: 0 },
-  { text: "איזו חיה היא המהירה ביבשה?", options: ["אריה", "צבי", "ברדלס", "נמר"], correctIdx: 2 },
-  { text: "איזה חטיף ישראלי מבוסס בוטנים?", options: ["ביסלי", "במבה", "תפוצ'יפס", "אפרופו"], correctIdx: 1 },
-  { text: "מהי עיר הבירה של יפן?", options: ["בייג'ינג", "טוקיו", "סיאול", "האנוי"], correctIdx: 1 },
-];
+// הגדרת המבנה המדויק של שאלה כדי למנוע שגיאות TypeScript
+interface QuestionType {
+  level: number;
+  text: string;
+  options: string[];
+  correctIdx: number;
+}
+
+const ALL_QUESTIONS = questionsData as QuestionType[];
 
 export default function GameStep({ roomData, userId, updateRoom, handleAnswer }: any) {
   const isIndividual = roomData.gameMode === "individual";
@@ -29,15 +32,37 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     return () => clearInterval(t);
   }, [timeLeft]);
 
-  // מניעת באגים - שליפת שאלה נכונה מהמערך במעגליות
-  const qIdx = (roomData.currentQuestionIdx || 0) % MOCK_QUESTIONS.length;
-  const question = MOCK_QUESTIONS[qIdx];
+  // --- לוגיקת בחירת השאלות ורמת הקושי (אפיון 2.4) ---
+  const difficulty = roomData.difficulty || 'dynamic';
+  // מוצאים את הזמן הגבוה ביותר כדי לסנכרן את רמת הקושי לכולם באופן שווה
+  const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
+  const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
+
+  let targetLevel = 1;
+  if (difficulty === 'easy') {
+    targetLevel = maxTimeInGame <= 40 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); // משלב 1 ו-2
+  } else if (difficulty === 'hard') {
+    targetLevel = maxTimeInGame <= 30 ? 3 : 4;
+  } else {
+    // Dynamic (ברירת מחדל)
+    if (maxTimeInGame <= 20) targetLevel = 1;
+    else if (maxTimeInGame <= 40) targetLevel = 2;
+    else if (maxTimeInGame <= 55) targetLevel = 3;
+    else targetLevel = 4;
+  }
+
+  // סינון שאלות לפי הרמה המבוקשת ובחירה דטרמיניסטית לפי מספר השאלה הנוכחי
+  const levelQuestions = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
+  const availableQuestions = levelQuestions.length > 0 ? levelQuestions : ALL_QUESTIONS; // גיבוי למקרה חירום
+  const qIdx = (roomData.currentQuestionIdx || 0) % availableQuestions.length;
+  const question: QuestionType = availableQuestions[qIdx];
+
   const votes = roomData.votes || {};
 
   const handleVote = (optIdx: number) => {
     let newVotes = { ...votes, [userId]: optIdx };
     
-    // לוגיקת סנכרון בוטים לחדר ה-QA של עומר - כדי שלא תיתקע!
+    // לוגיקת סנכרון בוטים לחדר ה-QA של עומר - מצביעים יחד איתך מיד!
     if (!isIndividual && (roomData.id === 'עומר' || roomData.id === 'qa_omer_room')) {
       myTeamPlayers.forEach((p: any) => {
         if (p.isBot) newVotes[p.id] = optIdx;
@@ -58,7 +83,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
     const finalAnswer = isIndividual ? votes[userId] : firstVote;
     const isCorrect = finalAnswer === question.correctIdx;
     
-    // שולחים לשרת גם אם צדקנו וגם את השניות שנשארו לנו ברגע זה!
+    // שולחים לשרת את התשובה יחד עם הזמן שנשאר לנו בפועל!
     handleAnswer(isCorrect, timeLeft);
   };
 
@@ -74,9 +99,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
       {/* Athlete Clock UI */}
       <div style={s.clockContainer}>
         <svg width="150" height="150" viewBox="0 0 150 150">
-          {/* רקע המעגל (אפור כהה/שקוף) */}
           <circle cx="75" cy="75" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="10" />
-          {/* פס ההתקדמות (אדום) */}
           <circle 
             cx="75" cy="75" r={radius} 
             fill="none" 
@@ -98,7 +121,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
 
       <div style={s.optionsGrid}>
         {question.options.map((opt: string, i: number) => {
-          // מציאת השחקנים בקבוצה שלי שהצביעו לתשובה זו (בשביל המסגרות המקווקוות)
           const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
           const isSelectedByMe = votes[userId] === i;
           
@@ -114,7 +136,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer }:
             >
               <span style={s.optionText}>{opt}</span>
               
-              {/* חיווי ויזואלי של שאר חברי הקבוצה (פסים מקווקוים) */}
               {!isIndividual && votersForThis.length > 0 && (
                 <div style={s.votersContainer}>
                   {votersForThis.map((p: any) => (
