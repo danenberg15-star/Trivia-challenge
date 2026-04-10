@@ -18,13 +18,6 @@ export default function TriviaApp() {
 
   const wakeLockRef = useRef<any>(null);
 
-  // לוגיקה שמדלגת על ה-Setup במקרה של סולו
-  useEffect(() => {
-    if (step === 3 && roomData?.gameMode === "individual") {
-      updateRoom({ step: 4, preGameTimer: 3 });
-    }
-  }, [step, roomData?.gameMode, updateRoom]);
-
   useEffect(() => {
     const requestWakeLock = async () => {
       try {
@@ -63,10 +56,20 @@ export default function TriviaApp() {
           onJoin={handleJoinRoom} 
           onCreate={async (name, isSolo, diff) => {
             await handleCreateRoom(name);
-            updateRoom({ 
-              gameMode: isSolo ? 'individual' : 'team',
-              difficulty: diff 
-            });
+            // אם זה משחק יחידים, אנחנו קובעים את השלב ישירות ל-4 (ספירה לאחור) כדי לדלג על ה-Setup
+            if (isSolo) {
+              updateRoom({ 
+                gameMode: 'individual',
+                difficulty: diff,
+                step: 4,
+                preGameTimer: 3
+              });
+            } else {
+              updateRoom({ 
+                gameMode: 'team',
+                difficulty: diff 
+              });
+            }
           }} 
           onSetName={setUserName} 
         />
