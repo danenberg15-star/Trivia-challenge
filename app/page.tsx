@@ -18,6 +18,13 @@ export default function TriviaApp() {
 
   const wakeLockRef = useRef<any>(null);
 
+  // לוגיקה למעבר אוטומטי מסולו למשחק
+  useEffect(() => {
+    if (step === 3 && roomData?.gameMode === "individual") {
+      updateRoom({ step: 4, preGameTimer: 3 });
+    }
+  }, [step, roomData?.gameMode, updateRoom]);
+
   useEffect(() => {
     const requestWakeLock = async () => {
       try {
@@ -39,7 +46,6 @@ export default function TriviaApp() {
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden', position: 'relative' }}>
       
-      {/* כפתור יציאה גלובלי - מופיע רק מתוך החדר */}
       {step >= 3 && (
         <button 
           onClick={handleExit} 
@@ -55,21 +61,34 @@ export default function TriviaApp() {
       {step === 2 && (
         <EntryStep 
           onJoin={handleJoinRoom} 
-          onCreate={handleCreateRoom} 
+          onCreate={async (name, isSolo) => {
+            await handleCreateRoom(name);
+            // אם זה סולו, נעדכן מיד את ה-mode ל-individual ב-Firestore
+            if (isSolo) {
+              updateRoom({ gameMode: 'individual' });
+            } else {
+              updateRoom({ gameMode: 'team' });
+            }
+          }} 
           onSetName={setUserName} 
         />
       )}
 
+      {/* שלב 3 יופיע רק אם זה משחק קבוצתי */}
       {step === 3 && (
         !roomData ? (
-          <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען נתונים... ⏱️</div>
+          <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>טוען חדר... ⏱️</div>
         ) : (
-          <SetupStep 
-            roomData={roomData} 
-            userId={userId} 
-            updateRoom={updateRoom} 
-            onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
-          />
+          roomData.gameMode === "team" ? (
+            <SetupStep 
+              roomData={roomData} 
+              userId={userId} 
+              updateRoom={updateRoom} 
+              onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} 
+            />
+          ) : (
+            <div style={{color: 'white', textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>מתכונן למשחק סולו... 🚀</div>
+          )
         )
       )}
 
@@ -105,7 +124,6 @@ export default function TriviaApp() {
         />
       )}
 
-      {/* המסך החדש עבור הסולו בלבד - כל 5 שאלות */}
       {step === 8 && roomData && (
         <CheckpointStep
           roomData={roomData}
