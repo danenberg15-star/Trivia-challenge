@@ -156,7 +156,14 @@ export default function TriviaApp() {
             roomData={activeData} 
             userId={userId} 
             updateRoom={updateActiveRoom} 
-            onNext={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} 
+            onNext={() => {
+              // בדיקת ניתוב חכם: אם הגענו לצ'קפוינט, עוברים לשלב 8. אם לא, חוזרים לספירה לאחור.
+              if (activeData.isCheckpointNext) {
+                updateActiveRoom({ step: 8, isCheckpointNext: false });
+              } else {
+                updateActiveRoom({ step: 4, preGameTimer: 3 });
+              }
+            }} 
           />
         )
       )}

@@ -60,7 +60,7 @@ export function useGameState() {
       powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
       currentQuestionIdx: 0,
       votes: null,
-      readyTeams: {} // מאתחל מערכת מוכנות
+      readyTeams: {}
     });
     localStorage.setItem('trivia_user_name', name);
     setRoomId(newRoomId);
@@ -128,33 +128,36 @@ export function useGameState() {
     const asked = roomData.askedQuestions || [];
     const nextAsked = [...asked, questionObj.text];
 
-    const baseUpdate = {
+    // בודקים אם השאלה הבאה אמורה להיות צ'קפוינט
+    const isCheckpoint = nextIdx > 0 && nextIdx % 5 === 0;
+
+    const baseUpdate: any = {
       timeBanks: newTimeBanks,
       askedQuestions: nextAsked,
       lastCorrect: isCorrect,
       lastAnsweringTeam: teamName,
-      lastQuestion: questionObj, // שמירת האובייקט המלא למניעת באגים ב-N+1
-      readyTeams: {} // איפוס מוכנות בכל שאלה חדשה
+      lastQuestion: questionObj,
+      readyTeams: {},
+      currentQuestionIdx: nextIdx,
+      votes: null,
+      isCheckpointNext: isCheckpoint // שומרים את המידע הזה בשביל הניתוב הבא
     };
+
+    if (isCheckpoint) {
+      const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
+      const safePowerUpsObj = roomData.powerUps || {};
+      const currentPUs = safePowerUpsObj[teamName] || [];
+      baseUpdate.lastGrantedPowerUp = randomPU;
+      baseUpdate.powerUps = { ...safePowerUpsObj, [teamName]: [...currentPUs, randomPU] };
+    }
 
     if (newTime >= 120) {
       updateRoom({ ...baseUpdate, step: 7, winnerName: teamName });
     } else if (newTime <= 0) {
       updateRoom({ ...baseUpdate, step: 9, winnerName: "Game Over" });
-    } else if (nextIdx > 0 && nextIdx % 5 === 0) {
-      const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
-      const safePowerUpsObj = roomData.powerUps || {};
-      const currentPUs = safePowerUpsObj[teamName] || [];
-      updateRoom({ 
-        ...baseUpdate,
-        step: 8, 
-        lastGrantedPowerUp: randomPU,
-        currentQuestionIdx: nextIdx, 
-        votes: null,
-        powerUps: { ...safePowerUpsObj, [teamName]: [...currentPUs, randomPU] } 
-      });
     } else {
-      updateRoom({ ...baseUpdate, step: 6, currentQuestionIdx: nextIdx, votes: null });
+      // תמיד עוברים למסך התוצאות (שלב 6)
+      updateRoom({ ...baseUpdate, step: 6 });
     }
   };
 
