@@ -3,7 +3,8 @@ import React, { useEffect, useState, useRef } from "react";
 
 export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onNext }: any) {
   const [showReveal, setShowReveal] = useState(false);
-  const [animatedTimes, setAnimatedTimes] = useState<any>(null);
+  const [displayTimes, setDisplayTimes] = useState<any>(null);
+  const [targetTimes, setTargetTimes] = useState<any>(null);
   const hasInitialized = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -21,42 +22,66 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
   useEffect(() => {
     if (hasInitialized.current) return;
 
-    // 1. קביעת ערכי ההתחלה המדויקים (לפני הבונוס/קנס)
-    const oldTimes: any = {};
+    // 1. חישוב ערכי ההתחלה (לפני השינוי)
+    const startTimes: any = {};
     teamNames.forEach((name: string) => {
       let val = roomData.timeBanks[name];
       if (name === lastAnsweringTeam) {
         val = lastCorrect ? val - 10 : val + 7;
       }
-      oldTimes[name] = val;
+      startTimes[name] = val;
     });
     
-    setAnimatedTimes(oldTimes);
+    setDisplayTimes(startTimes);
+    setTargetTimes(startTimes); // בהתחלה היעד הוא המצב הקיים
     hasInitialized.current = true;
 
-    // 2. השהיה כפולה כדי להבטיח שהדפדפן "יתפוס" את נקודת ההתחלה של האנימציה
-    const timer = setTimeout(() => {
+    // 2. בניית המתח והפעלת המונה הרץ
+    const revealTimer = setTimeout(() => {
       setShowReveal(true);
-      
-      // עדכון לערכי הסיום - כאן מתחילה אנימציית ה-3 שניות
-      setAnimatedTimes(roomData.timeBanks);
+      setTargetTimes(roomData.timeBanks); // קביעת היעד החדש לשעונים (3 שניות אנימציה)
 
-      // 3. הפעלת סאונד - שים לב לשמות הקבצים המדויקים (Boo/Cheer)
+      // הפעלת סאונד - שמות קבצים תואמים ל-public
       if (typeof Audio !== "undefined") {
         const isMeAnswering = myTeamName === lastAnsweringTeam;
         const didIWinRound = (isMeAnswering && lastCorrect) || (!isMeAnswering && !lastCorrect);
-        
-        // תיקון קריטי: שמות קבצים עם אותיות גדולות כפי שמופיע ב-public שלך
         const soundFile = didIWinRound ? "/Cheer.m4a" : "/Boo.m4a";
         
         const audio = new Audio(soundFile);
         audio.volume = 0.9;
-        audio.play().catch(e => console.error("Audio block:", e));
+        audio.play().catch(e => console.warn("Audio play blocked:", e));
         audioRef.current = audio;
       }
+
+      // 3. יצירת אפקט "מונה רץ" למספרים
+      const duration = 3000; // 3 שניות
+      const frameRate = 50; // עדכון כל 50 מילי-שנייה
+      const totalSteps = duration / frameRate;
+      let step = 0;
+
+      const interval = setInterval(() => {
+        step++;
+        const progress = step / totalSteps;
+        
+        const nextDisplay: any = {};
+        teamNames.forEach((name: string) => {
+          const start = startTimes[name];
+          const end = roomData.timeBanks[name];
+          // חישוב הערך היחסי לכל צעד
+          nextDisplay[name] = start + (end - start) * progress;
+        });
+
+        setDisplayTimes(nextDisplay);
+
+        if (step >= totalSteps) {
+          clearInterval(interval);
+          setDisplayTimes(roomData.timeBanks); // וידוא ערך סופי מדויק
+        }
+      }, frameRate);
+
     }, 1200);
 
-    return () => clearTimeout(timer);
+    return () => clearTimeout(revealTimer);
   }, [roomData.timeBanks, teamNames, lastAnsweringTeam, lastCorrect, myTeamName]);
 
   useEffect(() => {
@@ -75,10 +100,10 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     updateRoom(updates);
   };
 
-  const CircularTimer = ({ value, teamName }: any) => {
+  const CircularTimer = ({ displayValue, targetValue, teamName }: any) => {
     const radius = 45;
     const circ = 2 * Math.PI * radius;
-    const progress = Math.min(Math.max(value / 120, 0), 1);
+    const progress = Math.min(Math.max(targetValue / 120, 0), 1);
     const offset = circ - (progress * circ);
     
     const isAnswering = teamName === lastAnsweringTeam;
@@ -103,9 +128,9 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
           />
         </svg>
         <div style={s.timerText}>
-          <div style={{...s.timerNum, color: 'white'}}>{Math.round(value)}</div>
+          <div style={{...s.timerNum, color: 'white'}}>{Math.round(displayValue)}</div>
           {showReveal && isAnswering && (
-            <div style={{...s.timerDiff, color, animation: 'floatEffect 2.5s forwards'}}>
+            <div style={{...s.timerDiff, color, animation: 'scoreFloat 2.5s forwards'}}>
               {lastCorrect ? "+10" : "-7"}
             </div>
           )}
@@ -114,7 +139,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     );
   };
 
-  if (!animatedTimes) return <div style={s.layout}>מנתח תוצאות...</div>;
+  if (!displayTimes) return <div style={s.layout}>טוען תוצאות...</div>;
 
   return (
     <div style={s.layout}>
@@ -147,11 +172,15 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
                 <div style={{...s.teamName, color: (isAnswering && showReveal) ? cardColor : '#FF9100'}}>
                   {name} {name === myTeamName ? "(אני)" : ""}
                 </div>
-                <CircularTimer value={animatedTimes[name]} teamName={name} />
+                <CircularTimer 
+                  displayValue={displayTimes[name]} 
+                  targetValue={targetTimes[name]} 
+                  teamName={name} 
+                />
                 <div style={s.statusText}>
                   {showReveal ? (
                     isAnswering ? (lastCorrect ? "✅ פגיעה!" : "❌ פספוס") : "⏳ המתנה"
-                  ) : "..."}
+                  ) : "מנתח..."}
                 </div>
               </div>
             );
@@ -171,7 +200,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
 
       <style jsx global>{`
         @keyframes flashEffect { 0% { opacity: 0.6; } 100% { opacity: 0; } }
-        @keyframes floatEffect { 
+        @keyframes scoreFloat { 
           0% { opacity: 0; transform: translateY(10px); } 
           20% { opacity: 1; transform: translateY(0); } 
           100% { opacity: 0; transform: translateY(-30px); } 
@@ -185,20 +214,20 @@ const s: any = {
   layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '15px', direction: 'rtl', position: 'relative', overflow: 'hidden' },
   flashOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, animation: 'flashEffect 1s forwards', pointerEvents: 'none', zIndex: 100 },
   container: { width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '20px', zIndex: 10 },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '18px', borderRadius: '30px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
-  qLabel: { fontSize: '0.75rem', color: '#FF9100', opacity: 0.7, marginBottom: '4px', display: 'block' },
-  qText: { fontSize: '1.1rem', fontWeight: 'bold', margin: '0 0 10px 0', lineHeight: '1.4' },
-  answerBadge: { display: 'inline-block', backgroundColor: 'rgba(0,229,255,0.1)', padding: '6px 12px', borderRadius: '10px', fontSize: '0.85rem' },
+  questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '30px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
+  qLabel: { fontSize: '0.8rem', color: '#FF9100', opacity: 0.7, marginBottom: '5px', display: 'block' },
+  qText: { fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 15px 0', lineHeight: '1.4' },
+  answerBadge: { display: 'inline-block', backgroundColor: 'rgba(0,229,255,0.1)', padding: '8px 15px', borderRadius: '12px', fontSize: '0.9rem' },
   answerVal: { color: '#00E5FF', fontWeight: 'bold' },
   teamsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
-  teamBox: { backgroundColor: 'rgba(255,255,255,0.02)', border: '3px solid', borderRadius: '35px', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'all 0.6s ease' },
-  teamName: { fontSize: '1rem', fontWeight: 'bold', marginBottom: '12px' },
+  teamBox: { backgroundColor: 'rgba(255,255,255,0.02)', border: '3px solid', borderRadius: '35px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'all 0.8s ease' },
+  teamName: { fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '15px' },
   timerWrapper: { position: 'relative', width: '110px', height: '110px' },
   timerText: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-  timerNum: { fontSize: '2.4rem', fontWeight: '900', fontFamily: 'monospace' },
-  timerDiff: { position: 'absolute', top: '0', fontSize: '1.1rem', fontWeight: '900' },
-  statusText: { marginTop: '10px', fontSize: '1rem', fontWeight: 'bold' },
+  timerNum: { fontSize: '2.5rem', fontWeight: '900', fontFamily: 'monospace' },
+  timerDiff: { position: 'absolute', top: '0', fontSize: '1.2rem', fontWeight: '900' },
+  statusText: { marginTop: '15px', fontSize: '1.2rem', fontWeight: 'bold' },
   actionArea: { marginTop: '10px' },
-  btnActive: { width: '100%', padding: '22px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '25px', fontSize: '1.5rem', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 30px rgba(255,145,0,0.4)' },
-  btnDisabled: { width: '100%', padding: '22px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '25px', fontSize: '1.2rem', fontWeight: 'bold' }
+  btnActive: { width: '100%', padding: '22px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '25px', fontSize: '1.6rem', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 35px rgba(255,145,0,0.5)' },
+  btnDisabled: { width: '100%', padding: '22px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '25px', fontSize: '1.3rem', fontWeight: 'bold' }
 };
