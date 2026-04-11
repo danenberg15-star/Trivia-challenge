@@ -16,7 +16,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const myTeamName = roomData.teamNames[me.teamIdx];
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
-  // אתחול טיימר מקומי מהבנק - טיפוס נתונים מוגדר למניעת שגיאות TS
+  // ניהול טיימר מקומי עם טיפוס נתונים למניעת שגיאות TS
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   
@@ -26,7 +26,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // סנכרון טיימר רק כשהשאלה משתנה - מונע קפיצות בזמן הצבעה של חברי קבוצה
+  // סנכרון טיימר רק בעת החלפת שאלה - מונע קפיצות בזמן הצבעה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
@@ -94,38 +94,39 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed) return; 
     let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
-    
-    // בוטים בקבוצה שלי (אם יש כאלו ב-QA) מעתיקים את הצבעתי מיד
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
     updateRoom({ votes: newVotes });
   };
 
-  // --- לוגיקת הבוטים היריבים בחדר ה-QA ---
-  // תיקון: הבוטים רק מצביעים, הם לא מעבירים את החדר שלב באופן אוטומטי
+  const roomDataRef = useRef(roomData);
+  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
+
+  // לוגיקת בוטים משודרגת לחדר QA: רק הצבעה, ללא מעבר שלב אוטומטי
   useEffect(() => {
     if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isFrozen && !hasFailed) {
       const botTimer = setTimeout(() => {
-        if (roomData.step !== 5) return;
+        const currentRoom = roomDataRef.current;
+        if (currentRoom.step !== 5) return;
         
-        // הבוטים בוחרים תשובה (נכונה ב-50% מהמקרים לצורך העניין)
-        const botTeamIdx = 1; // הבוטים הם תמיד קבוצה 2
-        const botPlayers = roomData.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        const botTeamIdx = 1; 
+        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
         
         if (botPlayers.length > 0) {
-          const randomVote = Math.random() > 0.5 ? question.correctIdx : Math.floor(Math.random() * 4);
-          let newVotes = { ...(roomData.votes || {}) };
-          botPlayers.forEach((p: any) => { newVotes[p.id] = randomVote; });
+          const isCorrect = currentRoom.currentQuestionIdx % 2 === 0;
+          const botChoice = isCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
           
-          // הבוטים מעדכנים רק את ההצבעות שלהם בענן
+          let newVotes = { ...(currentRoom.votes || {}) };
+          botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
+          
+          // הבוטים מעדכנים רק הצבעות. הם לא קוראים ל-handleAnswer.
           updateRoom({ votes: newVotes });
         }
-      }, 7000); // הבוטים מצביעים אחרי 7 שניות כדי לתת הרגשה של משחק חי
-
+      }, 7000); 
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, roomData.step, question.correctIdx]);
+  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, question.correctIdx]);
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -135,8 +136,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const handleSubmit = () => {
     if (!allAgreed) return;
-    // המעבר למסך N+1 קורה רק כאן, כשהקבוצה שלך אישרה סופית
-    handleAnswer(firstVote === question.correctIdx, timeLeft, question.text);
+    // שליחת אובייקט השאלה המלא ל-N+1
+    handleAnswer(firstVote === question.correctIdx, timeLeft, question);
   };
 
   const radius = 50;
@@ -165,12 +166,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
              </button>
           ))}
         </div>
-
         <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
-
         <div style={s.optionsGrid}>
           {isFrozen ? (
-            <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!<br/><br/>חשבו על התשובה...</div>
+            <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!</div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
@@ -180,7 +179,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
                 <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor: isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)', backgroundColor: isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'transparent' }}>
                   <span style={s.optionText}>{opt}</span>
                   <div style={s.votersContainer}>
-                    {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} title={p.name} />)}
+                    {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} />)}
                   </div>
                 </div>
               );

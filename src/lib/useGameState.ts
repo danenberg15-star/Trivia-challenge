@@ -59,7 +59,8 @@ export function useGameState() {
       timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
       powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
       currentQuestionIdx: 0,
-      votes: null
+      votes: null,
+      readyTeams: {}
     });
     localStorage.setItem('trivia_user_name', name);
     setRoomId(newRoomId);
@@ -94,7 +95,8 @@ export function useGameState() {
         timeBanks: { 'קבוצת QA': 30, 'הבוטים': 30 }, 
         powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
         currentQuestionIdx: 0,
-        votes: null
+        votes: null,
+        readyTeams: {}
       });
       localStorage.setItem('trivia_user_name', name);
       setRoomId(cleanCode);
@@ -115,7 +117,7 @@ export function useGameState() {
     return true;
   };
 
-  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionText: string) => {
+  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any) => {
     if (!roomData || !roomId) return;
     const me = roomData.players.find((p: any) => p.id === userId);
     const teamName = roomData.teamNames[me.teamIdx];
@@ -124,13 +126,15 @@ export function useGameState() {
     const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
     
     const asked = roomData.askedQuestions || [];
-    const nextAsked = [...asked, questionText];
+    const nextAsked = [...asked, questionObj.text];
 
     const baseUpdate = {
       timeBanks: newTimeBanks,
       askedQuestions: nextAsked,
       lastCorrect: isCorrect,
-      lastAnsweringTeam: teamName // שומר איזו קבוצה ענתה לצורך חיווי אישי ב-N+1
+      lastAnsweringTeam: teamName,
+      lastQuestion: questionObj, // שומר את השאלה המלאה כדי למנוע באגים בתצוגה ב-N+1
+      readyTeams: {} // מאפס מוכנות לשאלה הבאה
     };
 
     if (newTime >= 120) {
@@ -156,7 +160,7 @@ export function useGameState() {
 
   const restartGame = () => {
     const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, askedQuestions: [] });
+    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, askedQuestions: [], readyTeams: {} });
   };
 
   const handleExit = () => { setStep(2); setRoomId(''); setRoomData(null); };
