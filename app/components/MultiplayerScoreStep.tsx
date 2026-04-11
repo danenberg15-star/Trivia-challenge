@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onNext }: any) {
   const [showReveal, setShowReveal] = useState(false);
   const [animatedTimes, setAnimatedTimes] = useState<any>({});
-  const hasInitialized = useRef(false); // למניעת באג הריסט בלחיצה על כפתור מוכנות
+  const hasInitialized = useRef(false); 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const me = roomData.players.find((p: any) => p.id === userId);
@@ -19,14 +19,14 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
   const allReady = teamNames.every((name: string) => !!readyTeams[name]);
 
   useEffect(() => {
-    // אתחול פעם אחת בלבד לכניסה למסך
     if (hasInitialized.current) return;
     
+    // 1. קביעת הערכים ההתחלתיים (לפני השינוי)
     const initialTimes: any = {};
     teamNames.forEach((name: string) => {
       let val = roomData.timeBanks[name];
       if (name === lastAnsweringTeam) {
-        // מחשבים לאחור את הערך שהיה לפני העדכון ב-DB
+        // מחשבים הפוך: אם עכשיו זה אחרי תוספת של 10, נתחיל ממינוס 10
         val = lastCorrect ? val - 10 : val + 7;
       }
       initialTimes[name] = val;
@@ -34,22 +34,25 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     setAnimatedTimes(initialTimes);
     hasInitialized.current = true;
 
-    // הפעלת החשיפה והסאונד לאחר השהיה קלה
-    const revealTimer = setTimeout(() => {
+    // השהיה קצרה כדי לוודא שהדפדפן רינדר את המצב ההתחלתי
+    const timer = setTimeout(() => {
       setShowReveal(true);
+      
+      // 2. עדכון לערכים החדשים - זה מה שמפעיל את האנימציה המדורגת
       setAnimatedTimes(roomData.timeBanks);
 
-      // לוגיקת סאונד: מחיאות כפיים או בוז
+      // 3. הפעלת סאונד לפי הצלחה/כישלון קבוצתי
       if (typeof Audio !== "undefined") {
         const isMeAnswering = myTeamName === lastAnsweringTeam;
+        // ניצחון בסיבוב = אני עניתי נכון או שהם ענו טעות
         const didIWinRound = (isMeAnswering && lastCorrect) || (!isMeAnswering && !lastCorrect);
         const soundFile = didIWinRound ? "/cheer.mp3" : "/boo.mp3";
         audioRef.current = new Audio(soundFile);
         audioRef.current.play().catch(() => {});
       }
-    }, 1200);
+    }, 1500); // שהות למתח לפני החשיפה
 
-    return () => clearTimeout(revealTimer);
+    return () => clearTimeout(timer);
   }, [roomData.timeBanks, teamNames, lastAnsweringTeam, lastCorrect, myTeamName]);
 
   useEffect(() => {
@@ -75,7 +78,6 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     const offset = circ - (progress * circ);
     
     const isAnswering = teamName === lastAnsweringTeam;
-    // צבע המסגרת והשעון: ירוק להצלחה, אדום לטעות, זהב לממתין
     const color = isAnswering && showReveal ? (lastCorrect ? '#10b981' : '#ef4444') : '#FF9100';
 
     return (
@@ -110,7 +112,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
 
       <div style={s.container}>
         <div style={s.questionCard}>
-          <span style={s.qLabel}>השאלה:</span>
+          <span style={s.qLabel}>השאלה שנשאלה:</span>
           <h2 style={s.qText}>{lastQuestion?.text}</h2>
           {showReveal && (
             <div style={s.answerBadge}>
@@ -134,11 +136,11 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
                 <CircularTimer value={animatedTimes[name] || 0} teamName={name} />
                 <div style={s.statusText}>
                   {showReveal ? (
-                    isAnswering ? (lastCorrect ? "✅ הצלחה!" : "❌ פספוס") : "⏳ המתינו"
-                  ) : "מחשב..."}
+                    isAnswering ? (lastCorrect ? "✅ פגיעה!" : "❌ פספוס") : "⏳ המתנה"
+                  ) : "מנתח תוצאות..."}
                 </div>
                 <div style={s.readyIndicator}>
-                  {readyTeams[name] ? "👍 מוכן" : "💤 ממתין"}
+                  {readyTeams[name] ? "✅ מוכנים" : "⏳ מחכים"}
                 </div>
               </div>
             );
@@ -157,7 +159,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
       </div>
 
       <style jsx global>{`
-        @keyframes flashFadeOut { 0% { opacity: 0.6; } 100% { opacity: 0; } }
+        @keyframes flashEffect { 0% { opacity: 0.6; } 100% { opacity: 0; } }
       `}</style>
     </div>
   );
@@ -165,11 +167,11 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
 
 const s: any = {
   layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '15px', direction: 'rtl', position: 'relative', overflow: 'hidden' },
-  flashOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, animation: 'flashFadeOut 0.8s forwards', pointerEvents: 'none', zIndex: 100 },
+  flashOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, animation: 'flashEffect 0.8s forwards', pointerEvents: 'none', zIndex: 100 },
   container: { width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '20px', zIndex: 10 },
   questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', padding: '18px', borderRadius: '25px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
   qLabel: { fontSize: '0.75rem', color: '#FF9100', opacity: 0.7, marginBottom: '4px', display: 'block' },
-  qText: { fontSize: '1.15rem', fontWeight: 'bold', margin: '0 0 12px 0', lineHeight: '1.4' },
+  qText: { fontSize: '1.1rem', fontWeight: 'bold', margin: '0 0 12px 0', lineHeight: '1.4' },
   answerBadge: { display: 'inline-block', backgroundColor: 'rgba(0,229,255,0.1)', padding: '6px 12px', borderRadius: '10px', fontSize: '0.85rem' },
   answerVal: { color: '#00E5FF', fontWeight: 'bold' },
   teamsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
