@@ -10,7 +10,7 @@ import CountdownStep from "./components/CountdownStep";
 import GameStep from "./components/GameStep";
 import MultiplayerGameStep from "./components/MultiplayerGameStep";
 import ScoreStep from "./components/ScoreStep";
-import MultiplayerScoreStep from "./components/MultiplayerScoreStep"; // הייבוא החדש למסך ה-N+1
+import MultiplayerScoreStep from "./components/MultiplayerScoreStep"; // המנוע החדש של מסך ה-N+1
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
 import LoseStep from "./components/LoseStep";
@@ -81,7 +81,7 @@ export default function TriviaApp() {
     else updateFbRoom({ step: newStep });
   };
 
-  const onAnswer = (isCorrect: boolean, timeAtAnswer: number, questionText: string) => {
+  const onAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any) => {
     if (isSolo) {
       const me = localRoomData.players[0];
       const timeChange = isCorrect ? 5 : -2;
@@ -94,7 +94,7 @@ export default function TriviaApp() {
         currentQuestionIdx: nextIdx, 
         lastCorrect: isCorrect, 
         votes: {},
-        askedQuestions: [...(localRoomData.askedQuestions || []), questionText]
+        askedQuestions: [...(localRoomData.askedQuestions || []), questionObj.text]
       };
 
       if (newTime >= 60) {
@@ -115,7 +115,7 @@ export default function TriviaApp() {
         setLocalStep(6); 
       }
     } else {
-      handleFbAnswer(isCorrect, timeAtAnswer, questionText);
+      handleFbAnswer(isCorrect, timeAtAnswer, questionObj);
     }
   };
 
@@ -134,6 +134,7 @@ export default function TriviaApp() {
       {currentStep >= 3 && currentStep !== 10 && (
         <button onClick={onExit} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
       )}
+      
       {currentStep === 1 && <RulesStep onStart={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}
       {currentStep === 2 && <EntryStep onJoin={async (c, n) => { setIsSolo(false); return handleJoinRoom(c, n); }} onCreate={handleCreate} onSetName={setUserName} onViewHighscores={() => isSolo ? setLocalStep(10) : setFbStep(10)} />}
       {currentStep === 3 && activeData && <SetupStep roomData={activeData} userId={userId} updateRoom={updateActiveRoom} onStart={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} />}
@@ -147,12 +148,17 @@ export default function TriviaApp() {
         )
       )}
       
-      {/* כאן מתבצעת ההפרדה בין מסך הסולו למסך הקבוצתי החדש */}
+      {/* ניתוב חכם למסך הניקוד עם העברת הכלים הנדרשים (userId ו-updateRoom) */}
       {currentStep === 6 && activeData && (
         isSolo ? (
           <ScoreStep roomData={activeData} onNext={() => setLocalStep(5)} />
         ) : (
-          <MultiplayerScoreStep roomData={activeData} onNext={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} />
+          <MultiplayerScoreStep 
+            roomData={activeData} 
+            userId={userId} 
+            updateRoom={updateActiveRoom} 
+            onNext={() => updateActiveRoom({ step: 4, preGameTimer: 3 })} 
+          />
         )
       )}
 

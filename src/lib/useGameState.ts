@@ -60,7 +60,7 @@ export function useGameState() {
       powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
       currentQuestionIdx: 0,
       votes: null,
-      readyTeams: {}
+      readyTeams: {} // מאתחל מערכת מוכנות
     });
     localStorage.setItem('trivia_user_name', name);
     setRoomId(newRoomId);
@@ -133,8 +133,8 @@ export function useGameState() {
       askedQuestions: nextAsked,
       lastCorrect: isCorrect,
       lastAnsweringTeam: teamName,
-      lastQuestion: questionObj, // שומר את השאלה המלאה כדי למנוע באגים בתצוגה ב-N+1
-      readyTeams: {} // מאפס מוכנות לשאלה הבאה
+      lastQuestion: questionObj, // שמירת האובייקט המלא למניעת באגים ב-N+1
+      readyTeams: {} // איפוס מוכנות בכל שאלה חדשה
     };
 
     if (newTime >= 120) {

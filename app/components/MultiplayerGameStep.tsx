@@ -16,7 +16,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const myTeamName = roomData.teamNames[me.teamIdx];
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
-  // ניהול טיימר מקומי עם טיפוס נתונים למניעת שגיאות TS
+  // טיימר מקומי - הגדרת טיפוס למניעת שגיאות קומפילציה
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   
@@ -26,7 +26,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // סנכרון טיימר רק בעת החלפת שאלה - מונע קפיצות בזמן הצבעה
+  // סנכרון טיימר רק כשהשאלה משתנה - מונע קפיצות בזמן הצבעה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
@@ -120,7 +120,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           let newVotes = { ...(currentRoom.votes || {}) };
           botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
           
-          // הבוטים מעדכנים רק הצבעות. הם לא קוראים ל-handleAnswer.
           updateRoom({ votes: newVotes });
         }
       }, 7000); 
@@ -136,7 +135,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const handleSubmit = () => {
     if (!allAgreed) return;
-    // שליחת אובייקט השאלה המלא ל-N+1
+    // שליחת אובייקט השאלה המלא ל-N+1 כדי למנוע טעויות תצוגה
     handleAnswer(firstVote === question.correctIdx, timeLeft, question);
   };
 
@@ -166,7 +165,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
              </button>
           ))}
         </div>
+
         <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
+
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!</div>
