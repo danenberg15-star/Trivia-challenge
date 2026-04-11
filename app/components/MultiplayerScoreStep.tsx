@@ -21,12 +21,11 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
   useEffect(() => {
     if (hasInitialized.current) return;
     
-    // 1. קביעת הערכים ההתחלתיים (לפני השינוי)
+    // הגדרת ערכי התחלה (לפני הבונוס/קנס)
     const initialTimes: any = {};
     teamNames.forEach((name: string) => {
       let val = roomData.timeBanks[name];
       if (name === lastAnsweringTeam) {
-        // מחשבים הפוך: אם עכשיו זה אחרי תוספת של 10, נתחיל ממינוס 10
         val = lastCorrect ? val - 10 : val + 7;
       }
       initialTimes[name] = val;
@@ -34,23 +33,25 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     setAnimatedTimes(initialTimes);
     hasInitialized.current = true;
 
-    // השהיה קצרה כדי לוודא שהדפדפן רינדר את המצב ההתחלתי
+    // בניית מתח - חשיפה והתחלת האנימציה
     const timer = setTimeout(() => {
       setShowReveal(true);
       
-      // 2. עדכון לערכים החדשים - זה מה שמפעיל את האנימציה המדורגת
+      // התחלת האנימציה לעבר הערכים הסופיים
       setAnimatedTimes(roomData.timeBanks);
 
-      // 3. הפעלת סאונד לפי הצלחה/כישלון קבוצתי
+      // הפעלת סאונד
       if (typeof Audio !== "undefined") {
         const isMeAnswering = myTeamName === lastAnsweringTeam;
-        // ניצחון בסיבוב = אני עניתי נכון או שהם ענו טעות
         const didIWinRound = (isMeAnswering && lastCorrect) || (!isMeAnswering && !lastCorrect);
         const soundFile = didIWinRound ? "/cheer.m4a" : "/boo.m4a";
-        audioRef.current = new Audio(soundFile);
-        audioRef.current.play().catch(() => {});
+        
+        const audio = new Audio(soundFile);
+        audio.volume = 0.8;
+        audio.play().catch(e => console.log("Audio play blocked or file missing:", e));
+        audioRef.current = audio;
       }
-    }, 1500); // שהות למתח לפני החשיפה
+    }, 1200);
 
     return () => clearTimeout(timer);
   }, [roomData.timeBanks, teamNames, lastAnsweringTeam, lastCorrect, myTeamName]);
@@ -76,7 +77,6 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     const circ = 2 * Math.PI * radius;
     const progress = Math.min(Math.max(value / 120, 0), 1);
     const offset = circ - (progress * circ);
-    
     const isAnswering = teamName === lastAnsweringTeam;
     const color = isAnswering && showReveal ? (lastCorrect ? '#10b981' : '#ef4444') : '#FF9100';
 
@@ -89,7 +89,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
             strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" 
             transform="rotate(-90 55 55)" 
             style={{ 
-              transition: 'stroke-dashoffset 1s ease-in-out, stroke 0.5s ease', 
+              transition: 'stroke-dashoffset 3s ease-in-out, stroke 0.5s ease', 
               filter: `drop-shadow(0 0 8px ${color})` 
             }}
           />
