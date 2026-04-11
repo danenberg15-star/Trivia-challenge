@@ -46,7 +46,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
         const isMeAnswering = myTeamName === lastAnsweringTeam;
         // ניצחון בסיבוב = אני עניתי נכון או שהם ענו טעות
         const didIWinRound = (isMeAnswering && lastCorrect) || (!isMeAnswering && !lastCorrect);
-        const soundFile = didIWinRound ? "/cheer.mp3" : "/boo.mp3";
+        const soundFile = didIWinRound ? "/cheer.m4a" : "/boo.m4a";
         audioRef.current = new Audio(soundFile);
         audioRef.current.play().catch(() => {});
       }
