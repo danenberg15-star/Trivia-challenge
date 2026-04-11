@@ -13,16 +13,16 @@ const ALL_QUESTIONS = questionsData as QuestionType[];
 
 export default function MultiplayerScoreStep({ roomData, onNext }: any) {
   const [showReveal, setShowReveal] = useState(false);
+  const [animatedTimes, setAnimatedTimes] = useState<any>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // חילוץ נתוני השאלה שהרגע הסתיימה
-  const lastCorrect = roomData.lastCorrect;
   const teamNames = roomData.teamNames || [];
-  
-  // שחזור השאלה שהוצגה (מכיוון שהאינדקס ב-Firebase כבר התקדם)
+  const lastAnsweringTeam = roomData.lastAnsweringTeam;
+  const lastCorrect = roomData.lastCorrect;
+
+  // שחזור השאלה שהסתיימה לצורך תצוגה
   const prevIdx = (roomData.currentQuestionIdx || 1) - 1;
   const seed = roomData.seed || 37;
-  
   const difficulty = roomData.difficulty || 'dynamic';
   const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
   const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
@@ -42,36 +42,42 @@ export default function MultiplayerScoreStep({ roomData, onNext }: any) {
   const lastQuestion = levelPool[qIdx];
 
   useEffect(() => {
-    // 1. אפקט דרמטי בכניסה: צליל חשיפה
+    // אתחול אנימציית הטיימרים לערכים הישנים (לפני העדכון)
+    const initialTimes: any = {};
+    teamNames.forEach((name: string) => {
+      let val = roomData.timeBanks[name];
+      if (name === lastAnsweringTeam) {
+        val = lastCorrect ? val - 10 : val + 7; // חוזרים לערך שלפני החישוב
+      }
+      initialTimes[name] = val;
+    });
+    setAnimatedTimes(initialTimes);
+
+    // צליל חשיפה
     if (typeof Audio !== "undefined") {
-      audioRef.current = new Audio("/reveal-sound.mp3"); 
+      audioRef.current = new Audio("/reveal-sound.mp3");
       audioRef.current.play().catch(() => {});
     }
 
-    // 2. בניית מתח: חשיפה לאחר שנייה אחת (הבזק + תשובה + עדכון שעונים)
+    // חשיפה דרמטית לאחר שנייה
     const revealTimer = setTimeout(() => {
       setShowReveal(true);
-    }, 1000);
+      setAnimatedTimes(roomData.timeBanks); // עדכון לערכים האמיתיים כדי להפעיל אנימציה
+    }, 1200);
 
-    // 3. מעבר אוטומטי לספירה לאחור של השאלה הבאה (Step 4)
-    const transitionTimer = setTimeout(() => {
+    const nextTimer = setTimeout(() => {
       onNext();
-    }, 5500);
+    }, 6000);
 
     return () => {
       clearTimeout(revealTimer);
-      clearTimeout(transitionTimer);
+      clearTimeout(nextTimer);
     };
-  }, [onNext]);
+  }, [onNext, roomData.timeBanks, teamNames, lastAnsweringTeam, lastCorrect]);
 
   return (
-    <div style={{
-      ...s.layout,
-      backgroundColor: showReveal 
-        ? (lastCorrect ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)") 
-        : "#05081c"
-    }}>
-      {/* הבזק (Flash) דרמטי ברגע החשיפה */}
+    <div style={s.layout}>
+      {/* הבזק חשיפה אישי */}
       {showReveal && (
         <div style={{
           ...s.flashOverlay,
@@ -80,69 +86,76 @@ export default function MultiplayerScoreStep({ roomData, onNext }: any) {
       )}
 
       <div style={s.container}>
-        <div style={s.header}>
-          <span style={s.headerLabel}>סיכום סיבוב</span>
-          <h2 style={s.questionPreview}>{lastQuestion?.text}</h2>
-        </div>
-
-        <div style={s.revealBox}>
-          {!showReveal ? (
-            <div style={s.suspenseText}>מחשב תוצאות...</div>
-          ) : (
-            <div style={s.outcomeContainer}>
-              <div style={{...s.statusBadge, color: lastCorrect ? "#10b981" : "#ef4444"}}>
-                {lastCorrect ? "פגיעה בול! 🎉" : "פספוס... ❌"}
-              </div>
-              <div style={s.answerReveal}>
-                <span style={s.answerLabel}>התשובה הנכונה:</span>
-                <span style={s.answerValue}>{lastQuestion?.options[lastQuestion.correctIdx]}</span>
-              </div>
+        <div style={s.questionSection}>
+          <span style={s.smallLabel}>השאלה שהייתה:</span>
+          <h2 style={s.questionText}>{lastQuestion?.text}</h2>
+          {showReveal && (
+            <div style={s.answerHighlight}>
+              <span style={s.answerLabel}>תשובה נכונה:</span>
+              <span style={s.answerValue}>{lastQuestion?.options[lastQuestion.correctIdx]}</span>
             </div>
           )}
         </div>
 
-        <div style={s.scoreGrid}>
-          {teamNames.map((name: string) => (
-            <div key={name} style={s.teamCard}>
-              <div style={s.teamInfo}>
-                <span style={s.teamName}>{name}</span>
-                <div style={s.timeWrapper}>
-                  <span style={s.timeNumber}>{roomData.timeBanks?.[name] || 0}</span>
-                  <span style={s.timeUnit}>שנ'</span>
+        <div style={s.resultsGrid}>
+          {teamNames.map((name: string) => {
+            const isTheAnsweringTeam = name === lastAnsweringTeam;
+            const timeVal = animatedTimes[name] || 0;
+            const progress = (timeVal / 120) * 100;
+
+            return (
+              <div key={name} style={{
+                ...s.teamCard,
+                borderColor: showReveal && isTheAnsweringTeam ? (lastCorrect ? '#10b981' : '#ef4444') : 'rgba(255,255,255,0.1)'
+              }}>
+                <div style={s.teamHeader}>
+                  <span style={s.teamName}>{name}</span>
+                  {showReveal && isTheAnsweringTeam && (
+                    <span style={{...s.statusIcon, color: lastCorrect ? '#10b981' : '#ef4444'}}>
+                      {lastCorrect ? "✅ נכון!" : "❌ טעות"}
+                    </span>
+                  )}
+                  {showReveal && !isTheAnsweringTeam && (
+                    <span style={s.waitIcon}>⏳ המתינו</span>
+                  )}
                 </div>
+
+                <div style={s.timerSection}>
+                  <div style={s.timeNumbers}>
+                    <span style={s.currentTime}>{Math.round(timeVal)}</span>
+                    <span style={s.totalTime}>/ 120</span>
+                  </div>
+                  <div style={s.progressBarBg}>
+                    <div style={{
+                      ...s.progressBarFill,
+                      width: `${progress}%`,
+                      backgroundColor: isTheAnsweringTeam && showReveal ? (lastCorrect ? '#10b981' : '#ef4444') : '#FF9100'
+                    }} />
+                  </div>
+                </div>
+
+                {showReveal && isTheAnsweringTeam && (
+                  <div style={{
+                    ...s.floatingDiff,
+                    color: lastCorrect ? '#10b981' : '#ef4444'
+                  }}>
+                    {lastCorrect ? "+10 שנ'" : "-7 שנ'"}
+                  </div>
+                )}
               </div>
-              {showReveal && (
-                <div style={{
-                  ...s.scoreDiff,
-                  color: lastCorrect ? "#10b981" : "#ef4444"
-                }}>
-                  {lastCorrect ? "+10" : "-7"}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <div style={s.countdownNotice}>השאלה הבאה מתחילה עוד רגע...</div>
+      <div style={s.footer}>הסיבוב הבא מתחיל...</div>
 
       <style jsx global>{`
-        @keyframes flashEffect {
-          0% { opacity: 0.9; }
-          100% { opacity: 0; }
-        }
-        @keyframes popUp {
-          0% { transform: scale(0.9); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes floatScore {
-          0% { transform: translate(-50%, 15px); opacity: 0; }
-          20% { opacity: 1; }
-          100% { transform: translate(-50%, -35px); opacity: 0; }
-        }
-        @keyframes pulseText {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.05); }
+        @keyframes flashOut { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+        @keyframes scoreFloat { 
+          0% { transform: translateY(10px); opacity: 0; } 
+          20% { opacity: 1; } 
+          100% { transform: translateY(-30px); opacity: 0; } 
         }
       `}</style>
     </div>
@@ -150,26 +163,27 @@ export default function MultiplayerScoreStep({ roomData, onNext }: any) {
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', transition: 'background-color 0.6s ease', position: 'relative', overflow: 'hidden' },
-  flashOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, animation: 'flashEffect 0.5s ease-out forwards', pointerEvents: 'none', zIndex: 20 },
-  container: { width: '100%', maxWidth: '500px', textAlign: 'center', zIndex: 10 },
-  header: { marginBottom: '30px' },
-  headerLabel: { color: '#ffd700', fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 },
-  questionPreview: { fontSize: '1.3rem', color: 'white', marginTop: '10px', fontWeight: 'bold', lineHeight: '1.4' },
-  revealBox: { height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px' },
-  suspenseText: { fontSize: '2.2rem', fontWeight: '900', color: '#ffd700', animation: 'pulseText 1s infinite' },
-  outcomeContainer: { animation: 'popUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' },
-  statusBadge: { fontSize: '2.8rem', fontWeight: '900', marginBottom: '10px', textShadow: '0 0 20px rgba(0,0,0,0.5)' },
-  answerReveal: { backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px 20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' },
-  answerLabel: { fontSize: '0.9rem', color: 'white', opacity: 0.6, display: 'block' },
-  answerValue: { fontSize: '1.2rem', color: '#00E5FF', fontWeight: 'bold' },
-  scoreGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '20px' },
-  teamCard: { backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '20px', position: 'relative' },
-  teamInfo: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  teamName: { fontSize: '0.9rem', color: '#ffd700', marginBottom: '5px', fontWeight: 'bold' },
-  timeWrapper: { display: 'flex', alignItems: 'baseline', gap: '4px' },
-  timeNumber: { fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
-  timeUnit: { fontSize: '0.8rem', opacity: 0.5 },
-  scoreDiff: { position: 'absolute', top: '-15px', left: '50%', transform: 'translateX(-50%)', fontWeight: '900', fontSize: '1.8rem', animation: 'floatScore 2s ease-out forwards' },
-  countdownNotice: { marginTop: '40px', color: 'white', opacity: 0.4, fontSize: '0.9rem', fontWeight: 'bold' }
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', alignItems: 'center', justifyContent: 'center', padding: '20px', direction: 'rtl', position: 'relative', overflow: 'hidden' },
+  flashOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, animation: 'flashOut 0.6s ease-out forwards', pointerEvents: 'none', zIndex: 30 },
+  container: { width: '100%', maxWidth: '550px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '25px' },
+  questionSection: { textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.05)' },
+  smallLabel: { fontSize: '0.8rem', color: '#ffd700', opacity: 0.6, marginBottom: '8px', display: 'block' },
+  questionText: { fontSize: '1.2rem', fontWeight: 'bold', lineHeight: '1.4', margin: '0 0 15px 0' },
+  answerHighlight: { backgroundColor: 'rgba(0,229,255,0.1)', padding: '10px', borderRadius: '10px', display: 'inline-block' },
+  answerLabel: { fontSize: '0.8rem', marginLeft: '8px', opacity: 0.8 },
+  answerValue: { fontSize: '1rem', fontWeight: 'bold', color: '#00E5FF' },
+  resultsGrid: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  teamCard: { backgroundColor: 'rgba(255,255,255,0.04)', border: '2px solid', borderRadius: '24px', padding: '20px', position: 'relative', transition: 'all 0.5s ease' },
+  teamHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
+  teamName: { fontSize: '1.1rem', fontWeight: 'bold', color: '#ffd700' },
+  statusIcon: { fontWeight: '900', fontSize: '1.1rem' },
+  waitIcon: { fontSize: '0.9rem', opacity: 0.4 },
+  timerSection: { width: '100%' },
+  timeNumbers: { display: 'flex', alignItems: 'baseline', gap: '5px', marginBottom: '8px', justifyContent: 'center' },
+  currentTime: { fontSize: '2.5rem', fontWeight: '900', fontFamily: 'monospace' },
+  totalTime: { fontSize: '1rem', opacity: 0.4 },
+  progressBarBg: { width: '100%', height: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: '10px', transition: 'width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.5s ease' },
+  floatingDiff: { position: 'absolute', left: '20px', bottom: '20px', fontSize: '1.5rem', fontWeight: '900', animation: 'scoreFloat 2s ease-out forwards' },
+  footer: { marginTop: '30px', opacity: 0.3, fontSize: '0.9rem' }
 };

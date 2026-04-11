@@ -126,21 +126,31 @@ export function useGameState() {
     const asked = roomData.askedQuestions || [];
     const nextAsked = [...asked, questionText];
 
+    const baseUpdate = {
+      timeBanks: newTimeBanks,
+      askedQuestions: nextAsked,
+      lastCorrect: isCorrect,
+      lastAnsweringTeam: teamName // שומר איזו קבוצה ענתה לצורך חיווי אישי ב-N+1
+    };
+
     if (newTime >= 120) {
-      updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: teamName, askedQuestions: nextAsked });
+      updateRoom({ ...baseUpdate, step: 7, winnerName: teamName });
     } else if (newTime <= 0) {
-      updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over", askedQuestions: nextAsked });
+      updateRoom({ ...baseUpdate, step: 9, winnerName: "Game Over" });
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
       const safePowerUpsObj = roomData.powerUps || {};
       const currentPUs = safePowerUpsObj[teamName] || [];
       updateRoom({ 
-        timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU,
-        currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked,
+        ...baseUpdate,
+        step: 8, 
+        lastGrantedPowerUp: randomPU,
+        currentQuestionIdx: nextIdx, 
+        votes: null,
         powerUps: { ...safePowerUpsObj, [teamName]: [...currentPUs, randomPU] } 
       });
     } else {
-      updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked });
+      updateRoom({ ...baseUpdate, step: 6, currentQuestionIdx: nextIdx, votes: null });
     }
   };
 

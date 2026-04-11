@@ -16,7 +16,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const myTeamName = roomData.teamNames[me.teamIdx];
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
-  // אתחול טיימר מקומי מהבנק
+  // אתחול טיימר מקומי מהבנק - טיפוס נתונים מוגדר למניעת שגיאות TS
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   
@@ -26,7 +26,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // סנכרון טיימר רק כשהשאלה משתנה - מונע קפיצות בזמן הצבעה
+  // סנכרון טיימר רק כשהשאלה משתנה - מונע קפיצות בזמן הצבעה של חברי קבוצה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
@@ -35,7 +35,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   useEffect(() => {
     if (timeLeft <= 0 || isFrozen || hasFailed) return;
     const delay = isSlowMo ? 2000 : 1000;
-    // תיקון השגיאה: הוספת טיפוס number ל-prev
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed]);
@@ -53,11 +52,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
 
   let targetLevel = 1;
-  if (difficulty === 'easy') {
-    targetLevel = maxTimeInGame <= 60 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
-  } else if (difficulty === 'hard') {
-    targetLevel = maxTimeInGame <= 60 ? 3 : 4;
-  } else {
+  if (difficulty === 'easy') targetLevel = maxTimeInGame <= 60 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
+  else if (difficulty === 'hard') targetLevel = maxTimeInGame <= 60 ? 3 : 4;
+  else {
     if (maxTimeInGame <= 40) targetLevel = 1;
     else if (maxTimeInGame <= 80) targetLevel = 2;
     else if (maxTimeInGame <= 105) targetLevel = 3;
@@ -97,42 +94,38 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed) return; 
     let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
+    
+    // בוטים בקבוצה שלי (אם יש כאלו ב-QA) מעתיקים את הצבעתי מיד
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
     updateRoom({ votes: newVotes });
   };
 
-  const roomDataRef = useRef(roomData);
-  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
-
+  // --- לוגיקת הבוטים היריבים בחדר ה-QA ---
+  // תיקון: הבוטים רק מצביעים, הם לא מעבירים את החדר שלב באופן אוטומטי
   useEffect(() => {
     if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isFrozen && !hasFailed) {
       const botTimer = setTimeout(() => {
-        const currentRoom = roomDataRef.current;
-        if (currentRoom.step !== 5) return;
-        const team2Name = currentRoom.teamNames[1];
-        const isCorrect = currentRoom.currentQuestionIdx % 2 === 0;
-        const currentOtherTime = currentRoom.timeBanks[team2Name] || 15;
-        const newTime = Math.max(0, currentOtherTime + (isCorrect ? 10 : -7));
-        const nextIdx = (currentRoom.currentQuestionIdx || 0) + 1;
-        const newTimeBanks = { ...(currentRoom.timeBanks || {}), [team2Name]: newTime };
-        const asked = currentRoom.askedQuestions || [];
-        const nextAsked = [...asked, question.text];
-        if (newTime >= 120) updateRoom({ timeBanks: newTimeBanks, step: 7, winnerName: team2Name, askedQuestions: nextAsked });
-        else if (newTime <= 0) updateRoom({ timeBanks: newTimeBanks, step: 9, winnerName: "Game Over", askedQuestions: nextAsked });
-        else if (nextIdx > 0 && nextIdx % 5 === 0) {
-          const randomPU = ['50:50', 'freeze', 'slow-mo'][Math.floor(Math.random() * 3)];
-          const safePowerUpsObj = currentRoom.powerUps || {};
-          const currentPUs = safePowerUpsObj[team2Name] || [];
-          updateRoom({ timeBanks: newTimeBanks, step: 8, lastGrantedPowerUp: randomPU, currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked, powerUps: { ...safePowerUpsObj, [team2Name]: [...currentPUs, randomPU] } });
-        } else {
-          updateRoom({ timeBanks: newTimeBanks, step: 6, lastCorrect: isCorrect, currentQuestionIdx: nextIdx, votes: null, askedQuestions: nextAsked });
+        if (roomData.step !== 5) return;
+        
+        // הבוטים בוחרים תשובה (נכונה ב-50% מהמקרים לצורך העניין)
+        const botTeamIdx = 1; // הבוטים הם תמיד קבוצה 2
+        const botPlayers = roomData.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        
+        if (botPlayers.length > 0) {
+          const randomVote = Math.random() > 0.5 ? question.correctIdx : Math.floor(Math.random() * 4);
+          let newVotes = { ...(roomData.votes || {}) };
+          botPlayers.forEach((p: any) => { newVotes[p.id] = randomVote; });
+          
+          // הבוטים מעדכנים רק את ההצבעות שלהם בענן
+          updateRoom({ votes: newVotes });
         }
-      }, 10000);
+      }, 7000); // הבוטים מצביעים אחרי 7 שניות כדי לתת הרגשה של משחק חי
+
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, updateRoom, question.text]);
+  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, roomData.step, question.correctIdx]);
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -142,6 +135,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const handleSubmit = () => {
     if (!allAgreed) return;
+    // המעבר למסך N+1 קורה רק כאן, כשהקבוצה שלך אישרה סופית
     handleAnswer(firstVote === question.correctIdx, timeLeft, question.text);
   };
 
