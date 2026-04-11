@@ -10,7 +10,7 @@ import CountdownStep from "./components/CountdownStep";
 import GameStep from "./components/GameStep";
 import MultiplayerGameStep from "./components/MultiplayerGameStep";
 import ScoreStep from "./components/ScoreStep";
-import MultiplayerScoreStep from "./components/MultiplayerScoreStep"; // המנוע החדש של מסך ה-N+1
+import MultiplayerScoreStep from "./components/MultiplayerScoreStep";
 import VictoryStep from "./components/VictoryStep";
 import CheckpointStep from "./components/CheckpointStep";
 import LoseStep from "./components/LoseStep";
@@ -148,7 +148,6 @@ export default function TriviaApp() {
         )
       )}
       
-      {/* ניתוב חכם למסך הניקוד עם העברת הכלים הנדרשים (userId ו-updateRoom) */}
       {currentStep === 6 && activeData && (
         isSolo ? (
           <ScoreStep roomData={activeData} onNext={() => setLocalStep(5)} />
