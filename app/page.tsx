@@ -81,15 +81,6 @@ export default function TriviaApp() {
     else updateFbRoom({ step: newStep });
   };
 
-  const saveSoloHighscore = (name: string, questionsReached: number, timeLeft: number) => {
-    let score = 0;
-    const isWin = timeLeft >= 60;
-    if (isWin) score = Math.max(1000, 10000 - (questionsReached * 150));
-    else score = questionsReached * 10;
-    const highscoresRef = ref(db, 'highscores');
-    push(highscoresRef, { name, score, questions: questionsReached, date: new Date().toLocaleDateString('he-IL'), timestamp: Date.now() });
-  };
-
   const onAnswer = (isCorrect: boolean, timeAtAnswer: number, questionText: string) => {
     if (isSolo) {
       const me = localRoomData.players[0];
@@ -107,11 +98,9 @@ export default function TriviaApp() {
       };
 
       if (newTime >= 60) {
-        saveSoloHighscore(me.name, nextIdx, newTime);
         setLocalRoomData({ ...updatedData, winnerName: me.name });
         setLocalStep(7); 
       } else if (newTime <= 0) {
-        saveSoloHighscore(me.name, nextIdx, 0);
         setLocalRoomData(updatedData);
         setLocalStep(9); 
       } else if (nextIdx > 0 && nextIdx % 5 === 0) {
@@ -123,7 +112,7 @@ export default function TriviaApp() {
         setLocalStep(8); 
       } else {
         setLocalRoomData(updatedData);
-        setLocalStep(6); // עובר למסך תוצאות
+        setLocalStep(6); 
       }
     } else {
       handleFbAnswer(isCorrect, timeAtAnswer, questionText);
@@ -158,7 +147,7 @@ export default function TriviaApp() {
         )
       )}
       
-      {/* ניתוב חכם למסך התוצאות (Step 6) */}
+      {/* כאן מתבצעת ההפרדה בין מסך הסולו למסך הקבוצתי החדש */}
       {currentStep === 6 && activeData && (
         isSolo ? (
           <ScoreStep roomData={activeData} onNext={() => setLocalStep(5)} />

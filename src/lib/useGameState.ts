@@ -70,17 +70,16 @@ export function useGameState() {
     const roomRef = ref(db, `rooms/${cleanCode}`);
     const snapshot = await get(roomRef);
 
-    // לוגיקה ייעודית לחדר QA - איפוס מוחלט בכל כניסה מחודשת
     if (cleanCode === 'עומר' || cleanCode === 'qa_omer_room') {
       const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
       await set(roomRef, {
         id: cleanCode,
         creatorId: userId,
-        step: 3, // תמיד מחזיר ל-SetupStep
+        step: 3,
         gameMode: 'team',
         difficulty: 'dynamic',
         seed,
-        askedQuestions: [], // מאפס את היסטוריית השאלות כדי שאפשר יהיה לבדוק הכל מחדש
+        askedQuestions: [],
         players: [
           { id: userId, name, teamIdx: 0, color: '#00E5FF' },
           { id: 'bot_1', name: 'בוט אסי', teamIdx: 0, color: '#00bfa5', isBot: true },
@@ -92,7 +91,7 @@ export function useGameState() {
           { id: 'bot_7', name: 'בוט אבי', teamIdx: 1, color: '#fb923c', isBot: true }
         ],
         teamNames: ['קבוצת QA', 'הבוטים'],
-        timeBanks: { 'קבוצת QA': 15, 'הבוטים': 15 },
+        timeBanks: { 'קבוצת QA': 30, 'הבוטים': 30 }, 
         powerUps: { 'קבוצת QA': [], 'הבוטים': [] },
         currentQuestionIdx: 0,
         votes: null
@@ -102,9 +101,7 @@ export function useGameState() {
       return true;
     }
 
-    if (!snapshot.exists()) {
-      return false; // חדר רגיל שלא קיים יחזיר שגיאה
-    }
+    if (!snapshot.exists()) return false;
 
     const data = snapshot.val();
     const players = data.players || [];
