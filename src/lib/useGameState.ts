@@ -128,7 +128,7 @@ export function useGameState() {
     const asked = roomData.askedQuestions || [];
     const nextAsked = [...asked, questionObj.text];
 
-    // בודקים אם השאלה הבאה אמורה להיות צ'קפוינט
+    // בדיקה אם השאלה הבאה היא שאלת צ'קפוינט
     const isCheckpoint = nextIdx > 0 && nextIdx % 5 === 0;
 
     const baseUpdate: any = {
@@ -140,7 +140,7 @@ export function useGameState() {
       readyTeams: {},
       currentQuestionIdx: nextIdx,
       votes: null,
-      isCheckpointNext: isCheckpoint // שומרים את המידע הזה בשביל הניתוב הבא
+      isCheckpointNext: isCheckpoint // דגל שמנוהל ע"י ה-Container
     };
 
     if (isCheckpoint) {
@@ -156,14 +156,23 @@ export function useGameState() {
     } else if (newTime <= 0) {
       updateRoom({ ...baseUpdate, step: 9, winnerName: "Game Over" });
     } else {
-      // תמיד עוברים למסך התוצאות (שלב 6)
+      // תמיד עוברים למסך תוצאות (6) ולא מדלגים
       updateRoom({ ...baseUpdate, step: 6 });
     }
   };
 
   const restartGame = () => {
     const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
-    updateRoom({ step: 3, currentQuestionIdx: 0, seed, votes: null, timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, askedQuestions: [], readyTeams: {} });
+    updateRoom({ 
+      step: 3, 
+      currentQuestionIdx: 0, 
+      seed, 
+      votes: null, 
+      timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 }, 
+      askedQuestions: [], 
+      readyTeams: {},
+      isCheckpointNext: false
+    });
   };
 
   const handleExit = () => { setStep(2); setRoomId(''); setRoomData(null); };
