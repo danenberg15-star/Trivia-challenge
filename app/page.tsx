@@ -12,7 +12,8 @@ export default function TriviaApp() {
   
   const [gameMode, setGameMode] = useState<"none" | "solo" | "multi">("none");
   const [showHighscores, setShowHighscores] = useState(false);
-  const [showRules, setShowRules] = useState(true); // שונה ל-true: מסך החוקים עולה ראשון
+  const [showRules, setShowRules] = useState(true); 
+  const [playerName, setPlayerName] = useState<string>("אורח"); // נוסף סטייט לשמירת השם המוקלד
   const wakeLockRef = useRef<any>(null);
 
   useEffect(() => {
@@ -31,17 +32,14 @@ export default function TriviaApp() {
 
   if (!mounted) return null;
 
-  // חלון חוקים - לחיצה מעבירה אוטומטית לשיאים
   if (showRules) return <RulesStep onStart={() => { setShowRules(false); setShowHighscores(true); }} />;
   
-  // חלון שיאים - סגירה מעבירה למסך כניסה
   if (showHighscores) return <HighscoresStep onClose={() => setShowHighscores(false)} />;
 
-  // ניתוב לקונטיינר הנבחר
-  if (gameMode === "solo") return <SoloGameContainer userId={userId} onExit={() => setGameMode("none")} />;
+  // כעת מעבירים את ה-playerName למשחק הסולו כדי לפתור את השגיאה ולהשתמש בשם המוקלד
+  if (gameMode === "solo") return <SoloGameContainer userId={userId} userName={playerName} onExit={() => setGameMode("none")} />;
   if (gameMode === "multi") return <MultiplayerGameContainer onExit={() => setGameMode("none")} />;
 
-  // מסך כניסה (Router)
   return (
     <main style={{ height: '100dvh', backgroundColor: '#05081c', direction: 'rtl', overflow: 'hidden' }}>
       <EntryStep 
@@ -52,6 +50,7 @@ export default function TriviaApp() {
         }} 
         onCreate={async (name, solo) => {
           setUserName(name);
+          setPlayerName(name); // שמירת השם שהוקלד כדי להעביר אותו כ-Prop
           if (solo) {
             setGameMode("solo");
           } else {
