@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db } from "../../src/lib/firebase"; 
 import { ref, push } from "firebase/database"; 
 import CountdownStep from "./CountdownStep";
@@ -19,7 +19,25 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   const [finalScore, setFinalScore] = useState(0); 
   const [displayName, setDisplayName] = useState(""); 
 
-  // שימוש במפתח פנימי קבוע "player" כדי למנוע קריסות ובעיות סנכרון שם
+  // פונקציה אגרסיבית למציאת שם המשתמש
+  const findRealUserName = () => {
+    if (typeof window === 'undefined') return "שחקן";
+    
+    // ניסיון ראשון: המפתח הרשמי
+    const official = localStorage.getItem('trivia_user_name');
+    if (official && official !== "שחקן" && official !== "אורח") return official;
+
+    // ניסיון שני: סריקת כל ה-Storage למפתח שמכיל name
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.toLowerCase().includes('name') || key.toLowerCase().includes('user'))) {
+        const val = localStorage.getItem(key);
+        if (val && val.length > 1 && val !== "שחקן" && val !== "אורח") return val;
+      }
+    }
+    return "אורח";
+  };
+
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
     gameMode: 'individual',
@@ -31,7 +49,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     timeBanks: { "player": 20 },
     powerUps: { "player": [] },
     players: [{ id: userId, name: "player", teamIdx: 0 }],
-    teamNames: ["player"], // שדה הכרחי למניעת קריסה
+    teamNames: ["player"],
     preGameTimer: 3,
     lastCorrect: false
   });
@@ -42,12 +60,12 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   };
 
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
-    // שליפת השם האמיתי מהדיסק רק בסיום המשחק
-    const savedName = localStorage.getItem('trivia_user_name') || "אורח";
-    setDisplayName(savedName);
+    const actualName = findRealUserName();
+    setDisplayName(actualName);
 
     let score = 0;
     if (isVictory) {
+      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
       const accuracy = correctCount / questionsAsked;
       score = (12 / questionsAsked) * 10000 * accuracy;
     } else {
@@ -65,18 +83,20 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
 
     const finalResult = Math.max(0, Math.round(score));
     const timestamp = Date.now();
-    const gameId = `${userId}_${timestamp}`; 
+    const gameId = `solo_${userId}_${timestamp}`; 
 
     const scoreData = {
-      name: savedName,
+      name: actualName,
       score: finalResult,
       date: timestamp,
       difficulty: difficultyLabel,
       gameId: gameId
     };
 
-    // שמירה כפולה עם אותו gameId
+    // שמירה לענן
     push(ref(db, 'highscores'), scoreData);
+
+    // שמירה מקומית
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
     localScores.push(scoreData);
     localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
@@ -98,7 +118,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       timeBanks: { "player": newTime }, 
       currentQuestionIdx: nextIdx, 
       correctCount: newCorrectCount,
-      lastCorrect: isCorrect, // שדה הכרחי ל-ScoreStep
+      lastCorrect: isCorrect,
       askedQuestions: updatedAsked
     };
 

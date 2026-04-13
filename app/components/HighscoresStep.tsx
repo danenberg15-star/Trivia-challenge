@@ -8,6 +8,7 @@ interface ScoreEntry {
   score: number;
   date: number;
   difficulty: string;
+  gameId?: string;
 }
 
 export default function HighscoresStep({ onClose }: { onClose: () => void }) {
@@ -15,9 +16,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. משיכת נתונים מהענן (Firebase)
+    // 1. משיכת נתוני ענן
     const scoresRef = ref(db, 'highscores');
-    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(100));
+    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(150));
 
     const unsubscribe = onValue(scoresQuery, (snapshot) => {
       const firebaseScores: ScoreEntry[] = [];
@@ -29,18 +30,26 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
         });
       }
 
-      // 2. משיכת נתונים מקומיים (localStorage)
+      // 2. משיכת נתונים מקומיים
       const localData = localStorage.getItem('trivia_solo_highscores');
       const localScores: ScoreEntry[] = localData ? JSON.parse(localData) : [];
 
-      // 3. מיזוג והסרת כפילויות קשיחה
-      // אנחנו משתמשים ב-date (Timestamp) כמפתח ייחודי כי איחדנו אותו בשמירה
+      // 3. מיזוג וסינון אגרסיבי
       const combined = [...firebaseScores, ...localScores];
-      const uniqueScores = combined.filter((v, i, a) => 
-        a.findIndex(t => t.date === v.date) === i
-      );
+      
+      const uniqueScores = combined.filter((v, i, a) => {
+        // סינון שמות גנריים כדי לנקות את הטבלה
+        const isGeneric = ["שחקן", "אורח", "guest", "player", "anonymous", ""].includes(v.name.toLowerCase().trim());
+        if (isGeneric) return false;
 
-      // 4. מיון סופי והצגת 20 הגדולים
+        // הסרת כפילויות לפי gameId (עדיפות) או לפי שילוב של שם, ניקוד וזמן
+        return a.findIndex(t => 
+          (t.gameId && v.gameId && t.gameId === v.gameId) || 
+          (t.name === v.name && t.score === v.score && t.date === v.date)
+        ) === i;
+      });
+
+      // 4. מיון סופי והצגת 20 המובילים
       const sorted = uniqueScores
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);
@@ -69,9 +78,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
 
         <div style={s.listContainer}>
           {loading ? (
-            <p style={s.emptyState}>טוען שיאים מהעולם...</p>
+            <p style={s.emptyState}>מעבד נתונים מהעולם...</p>
           ) : scores.length === 0 ? (
-            <p style={s.emptyState}>עדיין אין שיאים... זה הזמן לקבוע אחד!</p>
+            <p style={s.emptyState}>עדיין אין שיאים רשמיים... זה הזמן לקבוע אחד!</p>
           ) : (
             scores.map((entry, idx) => (
               <div key={idx} style={{ 
@@ -91,7 +100,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <button onClick={onClose} style={s.closeBtn}>הבנתי, בואו נשחק! 🚀</button>
+        <button onClick={onClose} style={s.closeBtn}>חזרה למשחק 🚀</button>
       </div>
     </div>
   );
