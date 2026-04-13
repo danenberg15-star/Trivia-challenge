@@ -15,20 +15,34 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. משיכת שיאים מ-Firebase
     const scoresRef = ref(db, 'highscores');
-    // משיכת 20 התוצאות הגבוהות ביותר מהמסד
-    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(20));
+    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(50));
 
     const unsubscribe = onValue(scoresQuery, (snapshot) => {
+      const firebaseScores: ScoreEntry[] = [];
       const data = snapshot.val();
+      
       if (data) {
-        const scoresList: ScoreEntry[] = [];
-        snapshot.forEach((childSnapshot) => {
-          scoresList.push(childSnapshot.val() as ScoreEntry);
+        Object.values(data).forEach((s: any) => {
+          firebaseScores.push(s as ScoreEntry);
         });
-        // הפיכת הסדר ליורד (מהגבוה לנמוך)
-        setScores(scoresList.reverse());
       }
+
+      // 2. משיכת שיאים מקומיים (LocalStorage)
+      const localData = localStorage.getItem('trivia_solo_highscores');
+      const localScores: ScoreEntry[] = localData ? JSON.parse(localData) : [];
+
+      // 3. מיזוג והסרת כפילויות (לפי שם וניקוד)
+      const combined = [...firebaseScores, ...localScores];
+      const uniqueScores = combined.filter((v, i, a) => 
+        a.findIndex(t => t.name === v.name && t.score === v.score) === i
+      );
+
+      // 4. מיון לפי ניקוד יורד וחיתוך ל-20 הטובים ביותר
+      const sorted = uniqueScores.sort((a, b) => b.score - a.score).slice(0, 20);
+      
+      setScores(sorted);
       setLoading(false);
     });
 
@@ -38,7 +52,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const formatDate = (timestamp: number) => {
     if (!timestamp) return "";
     const date = new Date(timestamp);
-    return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
   };
 
   return (
@@ -52,9 +66,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
 
         <div style={s.listContainer}>
           {loading ? (
-            <p style={s.emptyState}>טוען שיאים מהעולם...</p>
+            <p style={s.emptyState}>טוען תוצאות...</p>
           ) : scores.length === 0 ? (
-            <p style={s.emptyState}>עדיין אין שיאים... זה הזמן לשחק!</p>
+            <p style={s.emptyState}>עדיין אין שיאים. זה הזמן לקבוע אחד!</p>
           ) : (
             scores.map((entry, idx) => (
               <div key={idx} style={{ 
@@ -66,7 +80,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
                 <div style={s.rank}>{idx + 1}</div>
                 <div style={s.details}>
                   <div style={s.name}>{entry.name}</div>
-                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty === 'hard' ? 'קשה' : 'דינמי'}</div>
+                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty === 'dynamic' ? 'דינמי' : 'רגיל'}</div>
                 </div>
                 <div style={s.score}>{Math.round(entry.score)} <span style={s.pts}>pts</span></div>
               </div>
