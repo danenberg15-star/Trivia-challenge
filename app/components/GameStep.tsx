@@ -15,6 +15,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const isIndividual = roomData.gameMode === "individual";
   const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
+  const myTeamPlayers = isIndividual ? [me] : roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 15);
   const [isRevealing, setIsRevealing] = useState(false);
@@ -26,153 +27,218 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
-  }, [roomData.timeBanks, myTeamName]);
-
-  // לוגיקת בחירת שאלה חכמה
-  const currentLevel = Math.min(Math.floor((roomData.currentQuestionIdx || 0) / 2) + 1, 10);
-  const levelQuestions = ALL_QUESTIONS.filter(q => q.level === currentLevel);
-  const askedTexts = roomData.askedQuestions || [];
-  const availableQuestions = levelQuestions.filter(q => !askedTexts.includes(q.text));
-  
-  // הגנה מפני תקיעה בשאלה השמינית: אם אין שאלות חדשות, נשתמש בכל מאגר הרמה
-  const pool = availableQuestions.length > 0 ? availableQuestions : levelQuestions;
-  
-  // בחירת שאלה יציבה מבוססת Seed
-  const questionIdx = (roomData.seed + (roomData.currentQuestionIdx || 0)) % pool.length;
-  const currentQuestion = pool[questionIdx];
+    setIsRevealing(false);
+    setHasFailed(false);
+    setHiddenOptions([]);
+    setIsFrozen(false);
+    setIsSlowMo(false);
+  }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
   useEffect(() => {
-    if (isRevealing || isFrozen) return;
-    if (timeLeft <= 0) {
+    if (timeLeft <= 0 || isRevealing || isFrozen || hasFailed) return;
+    const delay = isSlowMo ? 2000 : 1000;
+    const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
+    return () => clearInterval(t);
+  }, [timeLeft, isRevealing, isFrozen, isSlowMo, hasFailed]);
+
+  useEffect(() => {
+    if (timeLeft <= 0 && !hasFailed && !isRevealing) {
       setHasFailed(true);
-      setTimeout(() => handleAnswer(false, 0, currentQuestion), 1000);
-      return;
+      if (onDirectStepChange) {
+        onDirectStepChange(9); 
+      } else {
+        handleAnswer(false, 0, ""); 
+      }
     }
-    const tickRate = isSlowMo ? 2000 : 1000;
-    const timer = setInterval(() => setTimeLeft((prev: number) => Math.max(0, prev - 1)), tickRate);
-    return () => clearInterval(timer);
-  }, [timeLeft, isRevealing, isFrozen, isSlowMo, handleAnswer, currentQuestion]);
+  }, [timeLeft, hasFailed, isRevealing, onDirectStepChange, handleAnswer]);
 
-  const onOptionClick = (idx: number) => {
-    if (isRevealing) return;
-    setIsRevealing(true);
-    const isCorrect = idx === currentQuestion.correctIdx;
-    if (!isCorrect) setHasFailed(true);
-    setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
-  };
+  const difficulty = roomData.difficulty || 'dynamic';
+  const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
+  const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
 
-  const usePowerUp = (type: string) => {
-    const currentPUs = roomData.powerUps[myTeamName] || [];
-    if (!currentPUs.includes(type)) return;
+  let targetLevel = 1;
+  if (difficulty === 'easy') {
+    targetLevel = maxTimeInGame <= 40 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
+  } else if (difficulty === 'hard') {
+    targetLevel = maxTimeInGame <= 30 ? 3 : 4;
+  } else {
+    if (maxTimeInGame <= 20) targetLevel = 1;
+    else if (maxTimeInGame <= 40) targetLevel = 2;
+    else if (maxTimeInGame <= 55) targetLevel = 3;
+    else targetLevel = 4;
+  }
 
-    const newPUs = [...currentPUs];
-    newPUs.splice(newPUs.indexOf(type), 1);
-    updateRoom({ [`powerUps/${myTeamName}`]: newPUs });
+  // הגבלת הרמה המקסימלית ל-4 (כדי למנוע חיפוש רמה 5 שלא קיימת)
+  targetLevel = Math.min(targetLevel, 4);
 
-    if (type === '50:50') {
-      const wrongIndices = currentQuestion.options
-        .map((_, i) => i)
-        .filter(i => i !== currentQuestion.correctIdx);
-      const shuffled = wrongIndices.sort(() => 0.5 - Math.random());
-      setHiddenOptions([shuffled[0], shuffled[1]]);
-    } else if (type === 'freeze') {
+  const levelPool = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
+  
+  // === מערכת הזיכרון המשופרת: מניעת כפילויות ומניעת התרסקויות ===
+  const askedTexts = roomData.askedQuestions || [];
+  let filteredPool = levelPool.filter(q => !askedTexts.includes(q.text));
+  
+  // אם נגמרו השאלות ברמה הספציפית שלא נשאלו, לוקחים שאלה שלא נשאלה מכל המאגר
+  if (filteredPool.length === 0) {
+    const remainingGlobal = ALL_QUESTIONS.filter(q => !askedTexts.includes(q.text));
+    if (remainingGlobal.length > 0) {
+      filteredPool = remainingGlobal;
+    } else {
+      filteredPool = ALL_QUESTIONS; // גיבוי קיצוני למקרה ששאלו את כל 400 השאלות
+    }
+  }
+
+  const seed = roomData.seed || 37;
+  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % filteredPool.length;
+  const question: QuestionType = filteredPool[qIdx];
+
+  const votes = roomData.votes || {};
+
+  const safePowerUpsObj = roomData.powerUps || {};
+  let myPowerUps = safePowerUpsObj[myTeamName] || [];
+  if (!Array.isArray(myPowerUps)) myPowerUps = Object.values(myPowerUps);
+
+  const handlePowerUpClick = (pu: string) => {
+    let currentPUs = [...myPowerUps];
+    const idx = currentPUs.indexOf(pu);
+    if (idx > -1) {
+      currentPUs.splice(idx, 1);
+      updateRoom({ powerUps: { ...safePowerUpsObj, [myTeamName]: currentPUs } });
+    }
+
+    if (pu === '50:50') {
+      const incorrects = [0, 1, 2, 3].filter(i => i !== question.correctIdx);
+      incorrects.sort(() => Math.random() - 0.5);
+      setHiddenOptions([incorrects[0], incorrects[1]]);
+    } else if (pu === 'freeze') {
       setIsFrozen(true);
-      setTimeout(() => setIsFrozen(false), 5000);
-    } else if (type === 'slow-mo') {
+      setTimeout(() => setIsFrozen(false), 10000); 
+    } else if (pu === 'slow-mo') {
       setIsSlowMo(true);
     }
   };
 
+  const handleVote = (optIdx: number) => {
+    if (isRevealing || isFrozen || hasFailed) return; 
+    let newVotes = { ...votes, [userId]: optIdx };
+    updateRoom({ votes: newVotes });
+  };
+
+  const handleSubmit = () => {
+    if (votes[userId] === undefined) return;
+    setIsRevealing(true);
+    setTimeout(() => {
+      handleAnswer(votes[userId] === question.correctIdx, timeLeft, question.text);
+    }, 1500);
+  };
+
+  const maxTime = 60;
+  const progress = Math.min(Math.max(timeLeft / maxTime, 0), 1);
+  const radius = 50;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (progress * circumference);
+
+  const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#FF9100" : "#ef4444");
+
   return (
     <div style={s.layout}>
-      <div style={s.header}>
-        <div style={s.teamInfo}>
-          <div style={s.teamName}>{myTeamName}</div>
-          <div style={s.scoreBadge}>{Math.round(timeLeft)}s</div>
+      
+      <div style={s.clockContainer}>
+        <svg width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+          <circle 
+            cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" 
+            strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 60 60)" 
+            style={{ transition: 'stroke-dashoffset 1s linear', filter: `drop-shadow(0 0 5px ${clockColor})` }}
+          />
+        </svg>
+        <div style={s.clockTime}>{timeLeft}</div>
+      </div>
+
+      <div style={s.contentArea}>
+        {myPowerUps.length > 0 && !isRevealing && (
+          <div style={s.powerUpsContainer}>
+            {myPowerUps.map((pu: string, i: number) => (
+               <button key={i} onClick={() => handlePowerUpClick(pu)} style={s.puBtn}>
+                  {pu === '50:50' && '🌗 50:50'}
+                  {pu === 'freeze' && '❄️ הקפאה'}
+                  {pu === 'slow-mo' && '🐢 האטה'}
+               </button>
+            ))}
+          </div>
+        )}
+
+        <div style={s.questionCard}>
+          <h2 style={s.questionText}>{question.text}</h2>
         </div>
-        <div style={s.progressContainer}>
-          <div style={s.levelText}>רמה {currentLevel}</div>
-          <div style={s.qCounter}>שאלה {roomData.currentQuestionIdx + 1}</div>
+
+        <div style={s.optionsGrid}>
+          {isFrozen ? (
+            <div style={s.frozenBox}>
+              ❄️ הזמן קפא ל-10 שניות!<br/><br/>נצלו את הזמן כדי לחשוב על השאלה.
+            </div>
+          ) : (
+            question.options.map((opt: string, i: number) => {
+              const isSelectedByMe = votes[userId] === i;
+              
+              let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.03)';
+              let borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
+              
+              if (isRevealing) {
+                if (i === question.correctIdx) {
+                  bgColor = 'rgba(0, 229, 255, 0.15)'; 
+                  borderColor = '#00E5FF';
+                } else if (isSelectedByMe) {
+                  bgColor = 'rgba(239, 68, 68, 0.15)'; 
+                  borderColor = '#ef4444';
+                }
+              }
+              
+              if (hiddenOptions.includes(i)) {
+                return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }}><span style={s.optionText}>{opt}</span></div>;
+              }
+
+              return (
+                <div 
+                  key={i} 
+                  onClick={() => handleVote(i)}
+                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, transform: isSelectedByMe && !isRevealing ? 'scale(1.02)' : 'scale(1)' }}
+                >
+                  <span style={{...s.optionText, color: isRevealing && i === question.correctIdx ? '#00E5FF' : 'white'}}>{opt}</span>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
-      <div style={s.timerBarContainer}>
-        <div style={{
-          ...s.timerBar,
-          width: `${(timeLeft / 30) * 100}%`,
-          backgroundColor: timeLeft < 5 ? '#ef4444' : (isFrozen ? '#00E5FF' : '#FF9100'),
-          boxShadow: isFrozen ? '0 0 15px #00E5FF' : 'none'
-        }} />
+      <div style={s.footer}>
+        <button 
+          onClick={handleSubmit} 
+          disabled={votes[userId] === undefined || isRevealing || isFrozen}
+          style={votes[userId] !== undefined ? s.submitBtn : s.submitBtnDisabled}
+        >
+          {isRevealing ? "בודק..." : (isFrozen ? "קפוא ❄️" : "סופי!")}
+        </button>
       </div>
 
-      {/* מיקום כוחות מעודכן - מתחת לטיימר כפי שביקשת */}
-      <div style={s.powerUpsSection}>
-        <div style={s.powerUpsRow}>
-          {['50:50', 'freeze', 'slow-mo'].map(type => {
-            const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
-            return (
-              <button key={type} onClick={() => usePowerUp(type)} disabled={count === 0 || isRevealing} style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}>
-                <span style={s.puIcon}>{type === '50:50' ? '🌓' : type === 'freeze' ? '❄️' : '⏳'}</span>
-                <span style={s.puCount}>x{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={s.questionCard}>
-        <h2 style={s.questionText}>{currentQuestion.text}</h2>
-      </div>
-
-      <div style={s.optionsGrid}>
-        {currentQuestion.options.map((opt, i) => {
-          if (hiddenOptions.includes(i)) return <div key={i} style={s.hiddenPlaceholder} />;
-          
-          let borderColor = 'rgba(255,255,255,0.1)';
-          let bgColor = 'rgba(255,255,255,0.05)';
-          
-          if (isRevealing) {
-            if (i === currentQuestion.correctIdx) {
-              borderColor = '#10b981';
-              bgColor = 'rgba(16,185,129,0.2)';
-            } else if (hasFailed) {
-              borderColor = '#ef4444';
-              bgColor = 'rgba(239,68,68,0.2)';
-            }
-          }
-
-          return (
-            <button key={i} onClick={() => onOptionClick(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}>
-              <span style={s.optionText}>{opt}</span>
-              {isRevealing && i === currentQuestion.correctIdx && <span>✅</span>}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', boxSizing: 'border-box', direction: 'rtl' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
-  teamInfo: { display: 'flex', flexDirection: 'column' },
-  teamName: { fontSize: '1.1rem', fontWeight: 'bold', color: '#00E5FF' },
-  scoreBadge: { fontSize: '1.4rem', fontWeight: '900', color: 'white' },
-  progressContainer: { textAlign: 'left' },
-  levelText: { fontSize: '0.8rem', color: '#FF9100' },
-  qCounter: { fontSize: '0.7rem', opacity: 0.6 },
-  timerBarContainer: { width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '15px', overflow: 'hidden' },
-  timerBar: { height: '100%', transition: 'all 1s linear' },
-  powerUpsSection: { marginBottom: '20px' },
-  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px' },
-  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
-  puIcon: { fontSize: '1rem' },
-  puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '20px', padding: '20px', marginBottom: '15px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
-  questionText: { fontSize: '1.2rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.3', margin: 0 },
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, overflowY: 'auto' },
-  optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', color: 'white', textAlign: 'right', backgroundColor: 'transparent' },
-  optionText: { fontSize: '1rem', fontWeight: 'bold' },
-  hiddenPlaceholder: { height: '55px' }
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' },
+  clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '10px' },
+  clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
+  contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
+  powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '5px', flexShrink: 0, width: '100%' },
+  puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '10px', color: '#FF9100', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' },
+  questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
+  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4', margin: 0 },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 },
+  optionBtn: { position: 'relative', border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', boxSizing: 'border-box' },
+  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
+  frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' },
+  footer: { width: '100%', maxWidth: '600px', padding: '10px 0', flexShrink: 0, boxSizing: 'border-box' },
+  submitBtn: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' },
+  submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem', cursor: 'not-allowed' }
 };

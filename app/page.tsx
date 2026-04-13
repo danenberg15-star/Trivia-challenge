@@ -12,7 +12,7 @@ export default function TriviaApp() {
   
   const [gameMode, setGameMode] = useState<"none" | "solo" | "multi">("none");
   const [showHighscores, setShowHighscores] = useState(false);
-  const [showRules, setShowRules] = useState(false);
+  const [showRules, setShowRules] = useState(true); // שונה ל-true: מסך החוקים עולה ראשון
   const wakeLockRef = useRef<any>(null);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function TriviaApp() {
   // חלון חוקים - לחיצה מעבירה אוטומטית לשיאים
   if (showRules) return <RulesStep onStart={() => { setShowRules(false); setShowHighscores(true); }} />;
   
-  // חלון שיאים
+  // חלון שיאים - סגירה מעבירה למסך כניסה
   if (showHighscores) return <HighscoresStep onClose={() => setShowHighscores(false)} />;
 
   // ניתוב לקונטיינר הנבחר
