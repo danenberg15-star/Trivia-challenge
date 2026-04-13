@@ -43,10 +43,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   // הגנה מפני התרסקות: אם נגמרו השאלות ברמה הספציפית, לוקחים שאלה שלא נשאלה מכל המאגר
   if (availableQuestions.length === 0) {
     availableQuestions = ALL_QUESTIONS.filter(q => !askedTexts.includes(q.text));
+    // מוצא אחרון בהחלט - אם הכל נשאל, מתחילים להשתמש בשאלות חוזרות כדי למנוע קריסה
     if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
   }
   
-  const questionIdx = (roomData.seed + (roomData.currentQuestionIdx || 0)) % availableQuestions.length;
+  const seed = roomData.seed || 37;
+  const questionIdx = (seed + (roomData.currentQuestionIdx || 0)) % availableQuestions.length;
   const currentQuestion = availableQuestions[questionIdx];
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     const isCorrect = idx === currentQuestion.correctIdx;
     if (!isCorrect) setHasFailed(true);
     
-    // מעבר לתוצאות עם הזמן שנשאר (הניקוד)
+    // שליחת התשובה ל-Container עם הזמן הנוכחי כניקוד
     setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
   };
 
@@ -117,7 +119,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       </div>
 
       <div style={s.contentArea}>
-        {/* שורת הכוחות - מתחת לשעון כפי שביקשת */}
+        {/* שורת הכוחות - ממוקמת מתחת לשעון */}
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;

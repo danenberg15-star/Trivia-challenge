@@ -15,17 +15,19 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // משיכת 20 השיאים הגבוהים ביותר מ-Firebase
     const scoresRef = ref(db, 'highscores');
+    // משיכת 20 התוצאות הגבוהות ביותר מהמסד
     const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(20));
 
     const unsubscribe = onValue(scoresQuery, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const scoresList: ScoreEntry[] = Object.values(data) as ScoreEntry[];
-        // Firebase מחזיר limitToLast בסדר עולה, אנחנו הופכים ליורד
-        const sorted = scoresList.sort((a, b) => b.score - a.score);
-        setScores(sorted);
+        const scoresList: ScoreEntry[] = [];
+        snapshot.forEach((childSnapshot) => {
+          scoresList.push(childSnapshot.val() as ScoreEntry);
+        });
+        // הפיכת הסדר ליורד (מהגבוה לנמוך)
+        setScores(scoresList.reverse());
       }
       setLoading(false);
     });
@@ -52,7 +54,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
           {loading ? (
             <p style={s.emptyState}>טוען שיאים מהעולם...</p>
           ) : scores.length === 0 ? (
-            <p style={s.emptyState}>עדיין אין שיאים... זה הזמן לשבור אחד!</p>
+            <p style={s.emptyState}>עדיין אין שיאים... זה הזמן לשחק!</p>
           ) : (
             scores.map((entry, idx) => (
               <div key={idx} style={{ 
@@ -64,7 +66,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
                 <div style={s.rank}>{idx + 1}</div>
                 <div style={s.details}>
                   <div style={s.name}>{entry.name}</div>
-                  <div style={s.stats}>{formatDate(entry.date)} | רמה: {entry.difficulty === 'dynamic' ? 'דינמי' : entry.difficulty}</div>
+                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty === 'hard' ? 'קשה' : 'דינמי'}</div>
                 </div>
                 <div style={s.score}>{Math.round(entry.score)} <span style={s.pts}>pts</span></div>
               </div>
@@ -94,5 +96,5 @@ const s: any = {
   stats: { fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' },
   score: { fontSize: '1.4rem', fontWeight: '900', color: '#00E5FF', textAlign: 'left' },
   pts: { fontSize: '0.75rem', color: '#64748b', marginRight: '2px' },
-  closeBtn: { width: '100%', height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' }
+  closeBtn: { width: '100%', height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 15px rgba(255,145,0,0.4)' }
 };

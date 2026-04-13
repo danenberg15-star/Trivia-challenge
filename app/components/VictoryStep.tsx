@@ -20,12 +20,12 @@ export default function VictoryStep({ winnerName, score, onRestart }: VictorySte
         </div>
 
         <div style={s.scoreBox}>
-          <div style={s.scoreLabel}>הניקוד שלך:</div>
+          <div style={s.scoreLabel}>הניקוד הסופי שלך:</div>
           <div style={s.scoreVal}>{Math.round(score)}</div>
           <div style={s.scoreUnit}>נקודות</div>
         </div>
 
-        <p style={s.text}>כל הכבוד! שברת את מחסום הזמן ונכנסת להיכל התהילה של הגלובוס.</p>
+        <p style={s.text}>כל הכבוד! שברת את מחסום הזמן והוכחת שליטה מוחלטת בטריוויה.</p>
         
         <button onClick={onRestart} style={s.button}>סיבוב נוסף? 🔄</button>
       </div>
