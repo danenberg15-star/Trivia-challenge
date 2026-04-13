@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import questionsData from "../../src/lib/questions.json";
 
 interface QuestionType {
@@ -23,19 +23,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const [hiddenOptions, setHiddenOptions] = useState<number[]>([]);
   const [isFrozen, setIsFrozen] = useState(false);
   const [isSlowMo, setIsSlowMo] = useState(false);
-
-  // רפרנסים לאובייקטי האודיו
-  const cheerAudio = useRef<HTMLAudioElement | null>(null);
-  const booAudio = useRef<HTMLAudioElement | null>(null);
-
-  // טעינה מראש של קבצי הסאונד מהתיקייה הציבורית (public)
-  useEffect(() => {
-    cheerAudio.current = new Audio('/cheer.m4a');
-    booAudio.current = new Audio('/boo.m4a');
-    
-    if (cheerAudio.current) cheerAudio.current.load();
-    if (booAudio.current) booAudio.current.load();
-  }, []);
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 20);
@@ -86,9 +73,14 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
     if (timeLeft <= 0) {
       setHasFailed(true);
-      if (booAudio.current) {
-        booAudio.current.play().catch(() => {});
+      
+      // הפעלת סאונד כישלון בדיוק כמו ב-Multiplayer
+      if (typeof Audio !== "undefined") {
+        const audio = new Audio('/Boo.m4a');
+        audio.volume = 0.9;
+        audio.play().catch(() => {});
       }
+      
       setTimeout(() => handleAnswer(false, 0, currentQuestion), 1000);
       return;
     }
@@ -107,15 +99,16 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     
     const isCorrect = idx === currentQuestion.correctIdx;
     
-    if (isCorrect) {
-      if (cheerAudio.current) {
-        cheerAudio.current.play().catch(e => console.log("Audio play error", e));
-      }
-    } else {
+    // הפעלת סאונד הצלחה/כישלון בדיוק כמו ב-Multiplayer
+    if (typeof Audio !== "undefined") {
+      const soundFile = isCorrect ? '/Cheer.m4a' : '/Boo.m4a';
+      const audio = new Audio(soundFile);
+      audio.volume = 0.9;
+      audio.play().catch((e) => console.log("Audio play error", e));
+    }
+
+    if (!isCorrect) {
       setHasFailed(true);
-      if (booAudio.current) {
-        booAudio.current.play().catch(e => console.log("Audio play error", e));
-      }
     }
     
     setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
