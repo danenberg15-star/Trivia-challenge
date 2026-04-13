@@ -19,6 +19,14 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
 
   if (!roomData) return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>טוען נתוני חדר...</div>;
 
+  // מציאת הקבוצה של המשתמש הנוכחי לצורך הצגת ניקוד בהפסד
+  const me = roomData.players?.find((p: any) => p.id === userId);
+  const myTeamName = me ? roomData.teamNames[me.teamIdx] : (roomData.teamNames ? roomData.teamNames[0] : "");
+  
+  // שליפת הניקוד הרלוונטי
+  const winningScore = roomData.winnerName ? (roomData.timeBanks?.[roomData.winnerName] || 0) : 0;
+  const myTeamScore = roomData.timeBanks?.[myTeamName] || 0;
+
   return (
     <div style={{ position: 'relative', height: '100dvh' }}>
       {step >= 3 && (
@@ -54,7 +62,6 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
           userId={userId} 
           updateRoom={updateRoom} 
           onNext={() => {
-            // בדיקת ניתוב: האם השאלה הבאה היא צ'קפוינט?
             if (roomData.isCheckpointNext) {
               updateRoom({ step: 8, isCheckpointNext: false });
             } else {
@@ -64,7 +71,13 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
         />
       )}
 
-      {step === 7 && <VictoryStep winnerName={roomData.winnerName || "המנצחים"} onRestart={restartGame} />}
+      {step === 7 && (
+        <VictoryStep 
+          winnerName={roomData.winnerName || "המנצחים"} 
+          score={winningScore}
+          onRestart={restartGame} 
+        />
+      )}
       
       {step === 8 && (
         <CheckpointStep 
@@ -75,7 +88,12 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
         />
       )}
       
-      {step === 9 && <LoseStep onRestart={restartGame} />}
+      {step === 9 && (
+        <LoseStep 
+          score={myTeamScore}
+          onRestart={restartGame} 
+        />
+      )}
     </div>
   );
 }

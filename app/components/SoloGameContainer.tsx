@@ -15,8 +15,8 @@ interface SoloGameContainerProps {
 }
 
 export default function SoloGameContainer({ userId, onExit }: SoloGameContainerProps) {
-  // התחלה ישירה משלב 4 (Countdown) ללא מסך Setup כפי שביקשת
   const [step, setStep] = useState(4);
+  const [finalScore, setFinalScore] = useState(0); 
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
     gameMode: 'individual',
@@ -37,13 +37,26 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     if (updates.step !== undefined) setStep(updates.step);
   };
 
+  const saveScoreToFirebase = (score: number) => {
+    const me = roomData.players[0];
+    if (score > 0) {
+      push(ref(db, 'highscores'), {
+        name: me.name,
+        score: Math.round(score),
+        date: Date.now(),
+        difficulty: roomData.difficulty || 'dynamic'
+      });
+    }
+  };
+
   const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any) => {
     const me = roomData.players[0];
     const timeChange = isCorrect ? 5 : -2;
     const newTime = Math.max(0, timeAtAnswer + timeChange);
     const nextIdx = roomData.currentQuestionIdx + 1;
     
-    const updatedAsked = [...(roomData.askedQuestions || []), questionObj.text];
+    const questionText = typeof questionObj === 'string' ? questionObj : questionObj?.text;
+    const updatedAsked = [...(roomData.askedQuestions || []), questionText];
 
     const updatedData = { 
       ...roomData, 
@@ -55,27 +68,26 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     };
 
     if (newTime >= 60) {
-      push(ref(db, 'highscores'), {
-        name: me.name,
-        score: newTime,
-        date: Date.now(),
-        difficulty: roomData.difficulty
-      });
+      saveScoreToFirebase(newTime);
+      setFinalScore(newTime);
       setRoomData({ ...updatedData, winnerName: me.name });
       setStep(7);
     } else if (newTime <= 0) {
+      const lastScore = Math.max(0, timeAtAnswer);
+      saveScoreToFirebase(lastScore);
+      setFinalScore(lastScore);
       setRoomData(updatedData);
       setStep(9);
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const powers = ['50:50', 'freeze', 'slow-mo'];
-      const randomPU = powers[Math.floor(Math.random() * powers.length)];
+      const randomPU = powers[Math.floor(Math.random() * 3)];
       updatedData.powerUps = { [me.name]: [...(roomData.powerUps[me.name] || []), randomPU] };
       updatedData.lastGrantedPowerUp = randomPU;
       setRoomData(updatedData);
-      setStep(8); // Checkpoint
+      setStep(8);
     } else {
       setRoomData(updatedData);
-      setStep(6); // Score
+      setStep(6);
     }
   };
 
@@ -89,11 +101,12 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       seed: Math.floor(Math.random() * 100),
       preGameTimer: 3
     });
+    setFinalScore(0);
     setStep(4);
   };
 
   return (
-    <div style={{ position: 'relative', height: '100dvh' }}>
+    <div style={{ position: 'relative', height: '100dvh', overflow: 'hidden' }}>
       <button 
         onClick={onExit} 
         style={{ 
@@ -108,9 +121,9 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       {step === 4 && <CountdownStep timer={roomData.preGameTimer || 3} onComplete={() => setStep(5)} />}
       {step === 5 && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} onDirectStepChange={(s: number) => setStep(s)} />}
       {step === 6 && <ScoreStep roomData={roomData} onNext={() => setStep(5)} />}
-      {step === 7 && <VictoryStep winnerName={roomData.winnerName} onRestart={onRestart} />}
+      {step === 7 && <VictoryStep winnerName={roomData.players[0].name} score={finalScore} onRestart={onRestart} />}
       {step === 8 && <CheckpointStep roomData={roomData} userId={userId} updateRoom={updateRoom} onComplete={() => setStep(5)} />}
-      {step === 9 && <LoseStep onRestart={onRestart} />}
+      {step === 9 && <LoseStep score={finalScore} onRestart={onRestart} />}
     </div>
   );
 }

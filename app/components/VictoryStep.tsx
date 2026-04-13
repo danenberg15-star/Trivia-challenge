@@ -1,31 +1,128 @@
 "use client";
 import React from "react";
 
-export default function VictoryStep({ winnerName, onRestart }: { winnerName: string; onRestart: () => void }) {
+interface VictoryStepProps {
+  winnerName: string;
+  score: number;
+  onRestart: () => void;
+}
+
+export default function VictoryStep({ winnerName, score, onRestart }: VictoryStepProps) {
   return (
     <div style={s.layout}>
       <div style={s.container}>
         <div style={s.icon}>🏆</div>
-        <h1 style={s.title}>יש לנו מנצח!</h1>
+        <h1 style={s.title}>ניצחון מוחץ!</h1>
+        
         <div style={s.winnerCard}>
-          <div style={s.winnerLabel}>מקום ראשון:</div>
+          <div style={s.winnerLabel}>אלוף המשחק:</div>
           <div style={s.winnerName}>{winnerName}</div>
         </div>
-        <p style={s.text}>כל הכבוד! הגעתם ליעד הזמן וניצחתם במשחק.</p>
-        <button onClick={onRestart} style={s.button}>לשחק שוב? 🔄</button>
+
+        <div style={s.scoreBox}>
+          <div style={s.scoreLabel}>הניקוד שלך:</div>
+          <div style={s.scoreVal}>{Math.round(score)}</div>
+          <div style={s.scoreUnit}>נקודות</div>
+        </div>
+
+        <p style={s.text}>כל הכבוד! שברת את מחסום הזמן ונכנסת להיכל התהילה של הגלובוס.</p>
+        
+        <button onClick={onRestart} style={s.button}>סיבוב נוסף? 🔄</button>
       </div>
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', direction: 'rtl', alignItems: 'center', justifyContent: 'center' },
-  container: { width: '100%', maxWidth: '450px', backgroundColor: '#1a1d2e', borderRadius: '30px', padding: '40px 20px', textAlign: 'center', border: '2px solid #FF9100', boxShadow: '0 10px 30px rgba(255,145,0,0.3)' },
-  icon: { fontSize: '6rem', marginBottom: '20px', filter: 'drop-shadow(0 0 10px #FF9100)' },
-  title: { color: '#FF9100', fontSize: '3rem', fontWeight: '900', margin: '0 0 20px 0' },
-  winnerCard: { backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '20px', padding: '20px', marginBottom: '30px' },
-  winnerLabel: { fontSize: '1.1rem', color: '#FF9100', marginBottom: '10px' },
-  winnerName: { fontSize: '2.5rem', fontWeight: '900', color: 'white', textShadow: '0 0 10px rgba(255,255,255,0.5)' },
-  text: { fontSize: '1.2rem', marginBottom: '30px', opacity: 0.9, lineHeight: '1.5' },
-  button: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '18px', fontSize: '1.5rem', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.3)', transition: 'transform 0.2s' }
+  layout: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    height: '100dvh', 
+    backgroundColor: '#05081c', 
+    color: 'white', 
+    padding: '20px', 
+    direction: 'rtl', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  container: { 
+    width: '100%', 
+    maxWidth: '450px', 
+    backgroundColor: '#1a1d2e', 
+    borderRadius: '40px', 
+    padding: '40px 20px', 
+    textAlign: 'center', 
+    border: '2px solid #FF9100', 
+    boxShadow: '0 15px 50px rgba(255,145,0,0.3)' 
+  },
+  icon: { 
+    fontSize: '6rem', 
+    marginBottom: '20px', 
+    filter: 'drop-shadow(0 0 15px #FF9100)' 
+  },
+  title: { 
+    color: '#FF9100', 
+    fontSize: '2.8rem', 
+    fontWeight: '900', 
+    margin: '0 0 20px 0' 
+  },
+  winnerCard: { 
+    backgroundColor: 'rgba(255,145,0,0.1)', 
+    border: '1px solid #FF9100', 
+    borderRadius: '20px', 
+    padding: '15px', 
+    marginBottom: '20px' 
+  },
+  winnerLabel: { 
+    fontSize: '0.9rem', 
+    color: '#FF9100', 
+    opacity: 0.8 
+  },
+  winnerName: { 
+    fontSize: '2rem', 
+    fontWeight: '900', 
+    color: 'white' 
+  },
+  scoreBox: {
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+    border: '1px solid rgba(0, 229, 255, 0.3)',
+    borderRadius: '25px',
+    padding: '20px',
+    marginBottom: '30px'
+  },
+  scoreLabel: {
+    fontSize: '1rem',
+    color: '#00E5FF',
+    marginBottom: '5px'
+  },
+  scoreVal: {
+    fontSize: '3.5rem',
+    fontWeight: '900',
+    color: 'white',
+    lineHeight: 1
+  },
+  scoreUnit: {
+    fontSize: '0.8rem',
+    color: '#00E5FF',
+    opacity: 0.7
+  },
+  text: { 
+    fontSize: '1.1rem', 
+    lineHeight: '1.5', 
+    marginBottom: '35px', 
+    color: '#94a3b8' 
+  },
+  button: { 
+    width: '100%', 
+    padding: '22px', 
+    backgroundColor: '#FF9100', 
+    color: '#05081c', 
+    border: 'none', 
+    borderRadius: '20px', 
+    fontSize: '1.5rem', 
+    fontWeight: '900', 
+    cursor: 'pointer', 
+    boxShadow: '0 8px 25px rgba(255,145,0,0.4)',
+    transition: 'transform 0.2s'
+  }
 };
