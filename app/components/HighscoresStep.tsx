@@ -15,9 +15,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. משיכת שיאים מ-Firebase
+    // 1. הגדרת הפנייה ל-Firebase
     const scoresRef = ref(db, 'highscores');
-    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(50));
+    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(100));
 
     const unsubscribe = onValue(scoresQuery, (snapshot) => {
       const firebaseScores: ScoreEntry[] = [];
@@ -29,17 +29,17 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
         });
       }
 
-      // 2. משיכת שיאים מקומיים (LocalStorage)
+      // 2. משיכת שיאים מקומיים (LocalStorage) לגיבוי וסנכרון
       const localData = localStorage.getItem('trivia_solo_highscores');
       const localScores: ScoreEntry[] = localData ? JSON.parse(localData) : [];
 
-      // 3. מיזוג והסרת כפילויות (לפי שם וניקוד)
+      // 3. מיזוג רשימות והסרת כפילויות (לפי שם, ניקוד וזמן מדויק)
       const combined = [...firebaseScores, ...localScores];
       const uniqueScores = combined.filter((v, i, a) => 
-        a.findIndex(t => t.name === v.name && t.score === v.score) === i
+        a.findIndex(t => t.name === v.name && t.score === v.score && t.date === v.date) === i
       );
 
-      // 4. מיון לפי ניקוד יורד וחיתוך ל-20 הטובים ביותר
+      // 4. מיון לפי ניקוד יורד וחיתוך ל-20 המובילים
       const sorted = uniqueScores.sort((a, b) => b.score - a.score).slice(0, 20);
       
       setScores(sorted);
@@ -52,7 +52,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const formatDate = (timestamp: number) => {
     if (!timestamp) return "";
     const date = new Date(timestamp);
-    return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+    return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' });
   };
 
   return (
@@ -66,9 +66,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
 
         <div style={s.listContainer}>
           {loading ? (
-            <p style={s.emptyState}>טוען תוצאות...</p>
+            <p style={s.emptyState}>טוען שיאים מהעולם...</p>
           ) : scores.length === 0 ? (
-            <p style={s.emptyState}>עדיין אין שיאים. זה הזמן לקבוע אחד!</p>
+            <p style={s.emptyState}>עדיין אין שיאים... זה הזמן לקבוע אחד!</p>
           ) : (
             scores.map((entry, idx) => (
               <div key={idx} style={{ 
@@ -80,9 +80,9 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
                 <div style={s.rank}>{idx + 1}</div>
                 <div style={s.details}>
                   <div style={s.name}>{entry.name}</div>
-                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty === 'dynamic' ? 'דינמי' : 'רגיל'}</div>
+                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty}</div>
                 </div>
-                <div style={s.score}>{Math.round(entry.score)} <span style={s.pts}>pts</span></div>
+                <div style={s.score}>{Math.round(entry.score).toLocaleString()} <span style={s.pts}>pts</span></div>
               </div>
             ))
           )}
@@ -110,5 +110,5 @@ const s: any = {
   stats: { fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' },
   score: { fontSize: '1.4rem', fontWeight: '900', color: '#00E5FF', textAlign: 'left' },
   pts: { fontSize: '0.75rem', color: '#64748b', marginRight: '2px' },
-  closeBtn: { width: '100%', height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 15px rgba(255,145,0,0.4)' }
+  closeBtn: { width: '100%', height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' }
 };
