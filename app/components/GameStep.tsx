@@ -16,7 +16,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
   
-  // טיימר מקומי לתצוגה וירידת זמן
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 20);
   const [isRevealing, setIsRevealing] = useState(false);
   const [hasFailed, setHasFailed] = useState(false);
@@ -34,10 +33,9 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
-  // פתרון הבאג: שימוש ב-useMemo לקיבוע השאלה למשך כל זמן המענה, בהתבסס על ה"זמן ההתחלתי" בלבד
   const currentQuestion = useMemo(() => {
     const difficulty = roomData.difficulty || 'dynamic';
-    const baseTime = roomData.timeBanks[myTeamName] || 20; // הזמן הבסיסי של תחילת השאלה
+    const baseTime = roomData.timeBanks[myTeamName] || 20; 
 
     let targetLevel = 3;
     if (difficulty === 'easy') {
@@ -45,7 +43,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     } else if (difficulty === 'hard') {
       targetLevel = baseTime <= 30 ? 3 : 4;
     } else {
-      // Dynamic mode (משתנה)
       if (baseTime <= 10) targetLevel = 1;
       else if (baseTime <= 20) targetLevel = 2;
       else if (baseTime <= 35) targetLevel = 3;
@@ -58,7 +55,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     
     let availableQuestions = levelPool.filter(q => !askedTexts.includes(q.text));
     
-    // הגנה מפני התרוקנות מאגר השאלות ברמה הספציפית
     if (availableQuestions.length === 0) {
       availableQuestions = levelPool; 
       if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
@@ -73,6 +69,8 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     if (isRevealing || isFrozen) return;
     if (timeLeft <= 0) {
       setHasFailed(true);
+      const audio = new Audio('/boo.m4a');
+      audio.play().catch(() => {});
       setTimeout(() => handleAnswer(false, 0, currentQuestion), 1000);
       return;
     }
@@ -85,6 +83,12 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     if (isRevealing || isFrozen) return;
     setIsRevealing(true);
     const isCorrect = idx === currentQuestion.correctIdx;
+    
+    // השמעת קבצי קול מהספריה הציבורית
+    const audioPath = isCorrect ? '/cheer.m4a' : '/boo.m4a';
+    const audio = new Audio(audioPath);
+    audio.play().catch(e => console.log("Audio play failed", e));
+
     if (!isCorrect) setHasFailed(true);
     
     setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
@@ -96,7 +100,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
     const newPUs = [...currentPUs];
     newPUs.splice(newPUs.indexOf(type), 1);
-    updateRoom({ [`powerUps/${myTeamName}`]: newPUs });
+    
+    updateRoom({ 
+      powerUps: {
+        ...roomData.powerUps,
+        [myTeamName]: newPUs
+      }
+    });
 
     if (type === '50:50') {
       const wrongIndices = currentQuestion.options
@@ -106,7 +116,8 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       setHiddenOptions([shuffled[0], shuffled[1]]);
     } else if (type === 'freeze') {
       setIsFrozen(true);
-      setTimeout(() => setIsFrozen(false), 5000);
+      // הקפאה ל-10 שניות לפי ההוראות
+      setTimeout(() => setIsFrozen(false), 10000);
     } else if (type === 'slow-mo') {
       setIsSlowMo(true);
     }
@@ -117,7 +128,9 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress * circumference);
-  const clockColor = isFrozen ? "#00E5FF" : (timeLeft < 5 ? "#ef4444" : "#FF9100");
+  
+  // חיווי צבע לשעון: כחול בהקפאה, סגול בהאטה, כתום/אדום רגיל
+  const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#A855F7" : (timeLeft < 5 ? "#ef4444" : "#FF9100"));
 
   return (
     <div style={s.layout}>
@@ -127,10 +140,14 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           <circle 
             cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" 
             strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 60 60)" 
-            style={{ transition: 'stroke-dashoffset 1s linear', filter: `drop-shadow(0 0 5px ${clockColor})` }}
+            style={{ 
+              transition: isSlowMo ? 'stroke-dashoffset 2s linear' : 'stroke-dashoffset 1s linear', 
+              filter: `drop-shadow(0 0 8px ${clockColor})` 
+            }}
           />
         </svg>
         <div style={s.clockTime}>{Math.round(timeLeft)}</div>
+        {isSlowMo && <div style={s.slowMoBadge}>Slow Motion</div>}
       </div>
 
       <div style={s.contentArea}>
@@ -139,7 +156,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
             const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
             return (
               <button key={type} onClick={() => usePowerUp(type)} disabled={count === 0 || isRevealing} style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}>
-                <span style={s.puIcon}>{type === '50:50' ? '🌓' : type === 'freeze' ? '❄️' : '⏳'}</span>
+                <span style={s.puIcon}>{type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}</span>
                 <span style={s.puCount}>x{count}</span>
               </button>
             );
@@ -150,7 +167,8 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           <h2 style={s.questionText}>{currentQuestion.text}</h2>
         </div>
 
-        <div style={s.optionsGrid}>
+        {/* בזמן הקפאה הקומפוננטה מציגה הודעה שהתשובות מוסתרות */}
+        <div style={{ ...s.optionsGrid, filter: isFrozen ? 'blur(8px)' : 'none', pointerEvents: isFrozen ? 'none' : 'auto' }}>
           {currentQuestion.options.map((opt, i) => {
             if (hiddenOptions.includes(i)) return <div key={i} style={s.hiddenPlaceholder} />;
             
@@ -175,6 +193,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
             );
           })}
         </div>
+        
+        {isFrozen && (
+          <div style={s.freezeOverlay}>
+            <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>זמן קפוא! ❄️</span>
+            <span style={{ fontSize: '0.9rem' }}>התשובות מוסתרות ל-10 שניות</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -184,15 +209,17 @@ const s: any = {
   layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' },
   clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '10px' },
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
-  contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
+  slowMoBadge: { position: 'absolute', bottom: '-20px', fontSize: '0.7rem', color: '#A855F7', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' },
+  contentArea: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
   powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px', flexShrink: 0 },
   puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
   puIcon: { fontSize: '1rem' },
   puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
   questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
   questionText: { fontSize: '1.2rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.3', margin: 0 },
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0, transition: 'filter 0.3s ease' },
   optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', color: 'white', textAlign: 'right', backgroundColor: 'transparent' },
   optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  hiddenPlaceholder: { height: '55px' }
+  hiddenPlaceholder: { height: '55px' },
+  freezeOverlay: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', pointerEvents: 'none', textShadow: '0 0 10px rgba(0,229,255,0.5)' }
 };
