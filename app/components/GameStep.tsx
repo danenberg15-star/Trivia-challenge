@@ -33,17 +33,38 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
-  // לוגיקת בחירת שאלה חכמה - מוגבל לרמה 4 (המקסימום הקיים בקובץ)
-  const targetLevel = Math.min(Math.floor((roomData.currentQuestionIdx || 0) / 2) + 1, 4);
+  // אלגוריתם קושי דינמי מעודכן לפי אפיון v4.2.0 והוראות המשתמש
+  const getTargetLevel = () => {
+    const difficulty = roomData.difficulty || 'dynamic';
+    
+    if (difficulty === 'easy') {
+      // מצב קל: רמה 1 עד 40 שניות, לאחר מכן תנודות בין 1 ל-2
+      if (timeLeft <= 40) return 1;
+      return (Math.sin(timeLeft) > 0) ? 1 : 2;
+    } 
+    
+    if (difficulty === 'hard') {
+      // מצב קשה: מתחיל ברמה 3, עובר ל-4 מעל 30 שניות
+      return timeLeft <= 30 ? 3 : 4;
+    }
+
+    // מצב משתנה (Dynamic)
+    if (timeLeft <= 10) return 1;        // "מרחמת" ונותנת חמצן
+    if (timeLeft <= 20) return 2;        // רמה 2
+    if (timeLeft <= 35) return 3;        // רמה 3
+    if (timeLeft > 45) return 4;         // רמה 4 - ניסיון "הכשלה" לפני ניצחון
+    return 3; // ברירת מחדל לטווח הביניים 35-45
+  };
+
+  const targetLevel = getTargetLevel();
   const levelPool = ALL_QUESTIONS.filter(q => q.level === targetLevel);
   const askedTexts = roomData.askedQuestions || [];
   
   let availableQuestions = levelPool.filter(q => !askedTexts.includes(q.text));
   
-  // הגנה מפני התרסקות: אם נגמרו השאלות ברמה הספציפית, לוקחים שאלה שלא נשאלה מכל המאגר
+  // הגנה מפני נסיגה לרמות קלות: אם נגמרו השאלות ברמה המבוקשת, נשתמש בהן שוב באקראי
   if (availableQuestions.length === 0) {
-    availableQuestions = ALL_QUESTIONS.filter(q => !askedTexts.includes(q.text));
-    // מוצא אחרון בהחלט - אם הכל נשאל, מתחילים להשתמש בשאלות חוזרות כדי למנוע קריסה
+    availableQuestions = levelPool; 
     if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
   }
   
@@ -69,7 +90,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     const isCorrect = idx === currentQuestion.correctIdx;
     if (!isCorrect) setHasFailed(true);
     
-    // שליחת התשובה ל-Container עם הזמן הנוכחי כניקוד
     setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
   };
 
@@ -95,7 +115,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     }
   };
 
-  // לוגיקת השעון המעגלי
   const maxTime = 60;
   const progress = Math.min(Math.max(timeLeft / maxTime, 0), 1);
   const radius = 50;
@@ -105,7 +124,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
   return (
     <div style={s.layout}>
-      {/* השעון המעגלי */}
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
@@ -119,7 +137,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
       </div>
 
       <div style={s.contentArea}>
-        {/* שורת הכוחות - ממוקמת מתחת לשעון */}
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
