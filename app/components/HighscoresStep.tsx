@@ -15,7 +15,7 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. הגדרת הפנייה ל-Firebase
+    // 1. משיכת נתונים מהענן (Firebase)
     const scoresRef = ref(db, 'highscores');
     const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(100));
 
@@ -29,18 +29,21 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
         });
       }
 
-      // 2. משיכת שיאים מקומיים (LocalStorage) לגיבוי וסנכרון
+      // 2. משיכת נתונים מקומיים (localStorage)
       const localData = localStorage.getItem('trivia_solo_highscores');
       const localScores: ScoreEntry[] = localData ? JSON.parse(localData) : [];
 
-      // 3. מיזוג רשימות והסרת כפילויות (לפי שם, ניקוד וזמן מדויק)
+      // 3. מיזוג והסרת כפילויות קשיחה
+      // אנחנו משתמשים ב-date (Timestamp) כמפתח ייחודי כי איחדנו אותו בשמירה
       const combined = [...firebaseScores, ...localScores];
       const uniqueScores = combined.filter((v, i, a) => 
-        a.findIndex(t => t.name === v.name && t.score === v.score && t.date === v.date) === i
+        a.findIndex(t => t.date === v.date) === i
       );
 
-      // 4. מיון לפי ניקוד יורד וחיתוך ל-20 המובילים
-      const sorted = uniqueScores.sort((a, b) => b.score - a.score).slice(0, 20);
+      // 4. מיון סופי והצגת 20 הגדולים
+      const sorted = uniqueScores
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20);
       
       setScores(sorted);
       setLoading(false);
