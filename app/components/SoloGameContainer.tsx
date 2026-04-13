@@ -19,23 +19,15 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   const [finalScore, setFinalScore] = useState(0); 
   const [displayName, setDisplayName] = useState(""); 
 
-  // פונקציה אגרסיבית למציאת שם המשתמש
-  const findRealUserName = () => {
+  // משיכה ישירה ומדויקת של השם שהמשתמש הזין ללא סריקות מיותרות
+  const getExactUserName = () => {
     if (typeof window === 'undefined') return "שחקן";
     
-    // ניסיון ראשון: המפתח הרשמי
-    const official = localStorage.getItem('trivia_user_name');
-    if (official && official !== "שחקן" && official !== "אורח") return official;
-
-    // ניסיון שני: סריקת כל ה-Storage למפתח שמכיל name
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.toLowerCase().includes('name') || key.toLowerCase().includes('user'))) {
-        const val = localStorage.getItem(key);
-        if (val && val.length > 1 && val !== "שחקן" && val !== "אורח") return val;
-      }
+    const name = localStorage.getItem('trivia_user_name');
+    if (name && name.trim() !== "") {
+      return name;
     }
-    return "אורח";
+    return "שחקן";
   };
 
   const [roomData, setRoomData] = useState<any>({
@@ -60,7 +52,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   };
 
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
-    const actualName = findRealUserName();
+    const actualName = getExactUserName();
     setDisplayName(actualName);
 
     let score = 0;
