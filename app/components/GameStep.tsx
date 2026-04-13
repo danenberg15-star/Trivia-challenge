@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import questionsData from "../../src/lib/questions.json";
 
 interface QuestionType {
@@ -16,6 +16,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const me = roomData.players.find((p: any) => p.id === userId) || roomData.players[0];
   const myTeamName = isIndividual ? me.name : roomData.teamNames[me.teamIdx];
   
+  // טיימר מקומי לתצוגה וירידת זמן
   const [timeLeft, setTimeLeft] = useState(roomData.timeBanks[myTeamName] || 20);
   const [isRevealing, setIsRevealing] = useState(false);
   const [hasFailed, setHasFailed] = useState(false);
@@ -33,44 +34,40 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
-  // אלגוריתם קושי דינמי מעודכן לפי אפיון v4.2.0 והוראות המשתמש
-  const getTargetLevel = () => {
+  // פתרון הבאג: שימוש ב-useMemo לקיבוע השאלה למשך כל זמן המענה, בהתבסס על ה"זמן ההתחלתי" בלבד
+  const currentQuestion = useMemo(() => {
     const difficulty = roomData.difficulty || 'dynamic';
-    
+    const baseTime = roomData.timeBanks[myTeamName] || 20; // הזמן הבסיסי של תחילת השאלה
+
+    let targetLevel = 3;
     if (difficulty === 'easy') {
-      // מצב קל: רמה 1 עד 40 שניות, לאחר מכן תנודות בין 1 ל-2
-      if (timeLeft <= 40) return 1;
-      return (Math.sin(timeLeft) > 0) ? 1 : 2;
-    } 
-    
-    if (difficulty === 'hard') {
-      // מצב קשה: מתחיל ברמה 3, עובר ל-4 מעל 30 שניות
-      return timeLeft <= 30 ? 3 : 4;
+      targetLevel = baseTime <= 40 ? 1 : ((Math.sin(baseTime) > 0) ? 1 : 2);
+    } else if (difficulty === 'hard') {
+      targetLevel = baseTime <= 30 ? 3 : 4;
+    } else {
+      // Dynamic mode (משתנה)
+      if (baseTime <= 10) targetLevel = 1;
+      else if (baseTime <= 20) targetLevel = 2;
+      else if (baseTime <= 35) targetLevel = 3;
+      else if (baseTime > 45) targetLevel = 4;
+      else targetLevel = 3; 
     }
 
-    // מצב משתנה (Dynamic)
-    if (timeLeft <= 10) return 1;        // "מרחמת" ונותנת חמצן
-    if (timeLeft <= 20) return 2;        // רמה 2
-    if (timeLeft <= 35) return 3;        // רמה 3
-    if (timeLeft > 45) return 4;         // רמה 4 - ניסיון "הכשלה" לפני ניצחון
-    return 3; // ברירת מחדל לטווח הביניים 35-45
-  };
-
-  const targetLevel = getTargetLevel();
-  const levelPool = ALL_QUESTIONS.filter(q => q.level === targetLevel);
-  const askedTexts = roomData.askedQuestions || [];
-  
-  let availableQuestions = levelPool.filter(q => !askedTexts.includes(q.text));
-  
-  // הגנה מפני נסיגה לרמות קלות: אם נגמרו השאלות ברמה המבוקשת, נשתמש בהן שוב באקראי
-  if (availableQuestions.length === 0) {
-    availableQuestions = levelPool; 
-    if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
-  }
-  
-  const seed = roomData.seed || 37;
-  const questionIdx = (seed + (roomData.currentQuestionIdx || 0)) % availableQuestions.length;
-  const currentQuestion = availableQuestions[questionIdx];
+    const levelPool = ALL_QUESTIONS.filter(q => q.level === targetLevel);
+    const askedTexts = roomData.askedQuestions || [];
+    
+    let availableQuestions = levelPool.filter(q => !askedTexts.includes(q.text));
+    
+    // הגנה מפני התרוקנות מאגר השאלות ברמה הספציפית
+    if (availableQuestions.length === 0) {
+      availableQuestions = levelPool; 
+      if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
+    }
+    
+    const seed = roomData.seed || 37;
+    const questionIdx = (seed + (roomData.currentQuestionIdx || 0)) % availableQuestions.length;
+    return availableQuestions[questionIdx];
+  }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName, roomData.difficulty, roomData.seed, roomData.askedQuestions]);
 
   useEffect(() => {
     if (isRevealing || isFrozen) return;
