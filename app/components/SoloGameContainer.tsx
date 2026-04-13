@@ -22,6 +22,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     gameMode: 'individual',
     difficulty: 'dynamic',
     askedQuestions: [], 
+    correctCount: 0, // מונה תשובות נכונות לפי האפיון
     players: [{ id: userId, name: localStorage.getItem('trivia_user_name') || 'שחקן', teamIdx: 0, color: '#00E5FF' }],
     teamNames: [localStorage.getItem('trivia_user_name') || 'שחקן'],
     timeBanks: { [localStorage.getItem('trivia_user_name') || 'שחקן']: 20 },
@@ -49,11 +50,32 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     }
   };
 
+  const calculateFinalScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
+    let score = 0;
+    if (isVictory) {
+      // נוסחת ניצחון: 10,000 פחות 150 על כל שאלה, מינימום 1,000
+      score = Math.max(1000, 10000 - (questionsAsked * 150));
+    } else {
+      // נוסחת הפסד: 10 נקודות על כל תשובה נכונה
+      score = correctCount * 10;
+    }
+
+    // מכפילי קושי
+    if (roomData.difficulty === 'easy') {
+      score = score / 4;
+    } else if (roomData.difficulty === 'hard') {
+      score = score * 2;
+    }
+
+    return score;
+  };
+
   const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any) => {
     const me = roomData.players[0];
     const timeChange = isCorrect ? 5 : -2;
     const newTime = Math.max(0, timeAtAnswer + timeChange);
     const nextIdx = roomData.currentQuestionIdx + 1;
+    const newCorrectCount = isCorrect ? (roomData.correctCount || 0) + 1 : (roomData.correctCount || 0);
     
     const questionText = typeof questionObj === 'string' ? questionObj : questionObj?.text;
     const updatedAsked = [...(roomData.askedQuestions || []), questionText];
@@ -62,20 +84,24 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       ...roomData, 
       timeBanks: { [me.name]: newTime }, 
       currentQuestionIdx: nextIdx, 
+      correctCount: newCorrectCount,
       lastCorrect: isCorrect, 
       votes: {},
       askedQuestions: updatedAsked
     };
 
     if (newTime >= 60) {
-      saveScoreToFirebase(newTime);
-      setFinalScore(newTime);
+      // חישוב ניקוד סופי לפי אפיון ניצחון
+      const finalResult = calculateFinalScore(true, nextIdx, newCorrectCount);
+      saveScoreToFirebase(finalResult);
+      setFinalScore(finalResult);
       setRoomData({ ...updatedData, winnerName: me.name });
       setStep(7);
     } else if (newTime <= 0) {
-      const lastScore = Math.max(0, timeAtAnswer);
-      saveScoreToFirebase(lastScore);
-      setFinalScore(lastScore);
+      // חישוב ניקוד סופי לפי אפיון הפסד
+      const finalResult = calculateFinalScore(false, nextIdx, newCorrectCount);
+      saveScoreToFirebase(finalResult);
+      setFinalScore(finalResult);
       setRoomData(updatedData);
       setStep(9);
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
@@ -96,6 +122,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       ...roomData,
       askedQuestions: [],
       currentQuestionIdx: 0,
+      correctCount: 0,
       timeBanks: { [roomData.players[0].name]: 20 },
       powerUps: { [roomData.players[0].name]: [] },
       seed: Math.floor(Math.random() * 100),
