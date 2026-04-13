@@ -1,5 +1,6 @@
 "use client";
-import { useGameState } from "../../src/lib/useGameState";
+import { useState, useEffect } from "react";
+import { useMultiplayerGameState } from "../../src/lib/useMultiplayerGameState";
 import SetupStep from "./SetupStep";
 import CountdownStep from "./CountdownStep";
 import MultiplayerGameStep from "./MultiplayerGameStep";
@@ -13,11 +14,38 @@ interface MultiplayerGameContainerProps {
 }
 
 export default function MultiplayerGameContainer({ onExit }: MultiplayerGameContainerProps) {
-  const { 
-    userId, roomData, step, updateRoom, handleAnswer, restartGame 
-  } = useGameState();
+  const [activeRoomId, setActiveRoomId] = useState<string>("");
 
-  if (!roomData) return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>טוען נתוני חדר...</div>;
+  // שליפת מספר החדר שנשמר בעת הכניסה
+  useEffect(() => {
+    const savedRoomId = localStorage.getItem("trivia_room_id") || "";
+    setActiveRoomId(savedRoomId);
+  }, []);
+
+  // שימוש בלוגיקה הייעודית למשחק קבוצתי
+  const { 
+    userId, 
+    roomData, 
+    step, 
+    updateRoom, 
+    handleAnswer, 
+    restartGame 
+  } = useMultiplayerGameState(activeRoomId);
+
+  // הצגת הודעת טעינה רק אם באמת אין עדיין נתונים מה-Firebase
+  if (!roomData) {
+    return (
+      <div style={{ 
+        color: 'white', 
+        textAlign: 'center', 
+        marginTop: '50px', 
+        fontFamily: 'sans-serif',
+        direction: 'rtl' 
+      }}>
+        טוען נתוני חדר {activeRoomId}...
+      </div>
+    );
+  }
 
   // מציאת הקבוצה של המשתמש הנוכחי לצורך הצגת ניקוד בהפסד
   const me = roomData.players?.find((p: any) => p.id === userId);
@@ -28,19 +56,17 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
   const myTeamScore = roomData.timeBanks?.[myTeamName] || 0;
 
   return (
-    <div style={{ position: 'relative', height: '100dvh' }}>
-      {step >= 3 && (
-        <button 
-          onClick={onExit} 
-          style={{ 
-            position: 'absolute', top: '20px', left: '20px', 
-            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
-            color: 'white', borderRadius: '50%', width: '40px', height: '40px', 
-            fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center' 
-          }}
-        >✕</button>
-      )}
+    <div style={{ height: '100dvh', backgroundColor: '#05081c', overflow: 'hidden' }}>
+      <button 
+        onClick={onExit} 
+        style={{ 
+          position: 'absolute', top: '20px', left: '20px', 
+          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
+          color: 'white', borderRadius: '50%', width: '40px', height: '40px', 
+          fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', 
+          display: 'flex', alignItems: 'center', justifyContent: 'center' 
+        }}
+      >✕</button>
 
       {step === 3 && <SetupStep roomData={roomData} userId={userId} updateRoom={updateRoom} onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} />}
       
@@ -84,13 +110,13 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
           roomData={roomData} 
           userId={userId} 
           updateRoom={updateRoom} 
-          onComplete={() => updateRoom({ step: 5 })} 
+          onComplete={() => updateRoom({ step: 4, preGameTimer: 3 })} 
         />
       )}
       
       {step === 9 && (
         <LoseStep 
-          score={myTeamScore}
+          score={myTeamScore} 
           onRestart={restartGame} 
         />
       )}

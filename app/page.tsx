@@ -13,7 +13,7 @@ export default function TriviaApp() {
   const [gameMode, setGameMode] = useState<"none" | "solo" | "multi">("none");
   const [showHighscores, setShowHighscores] = useState(false);
   const [showRules, setShowRules] = useState(true); 
-  const [playerName, setPlayerName] = useState<string>("אורח"); // נוסף סטייט לשמירת השם המוקלד
+  const [playerName, setPlayerName] = useState<string>("אורח"); 
   const wakeLockRef = useRef<any>(null);
 
   useEffect(() => {
@@ -36,7 +36,6 @@ export default function TriviaApp() {
   
   if (showHighscores) return <HighscoresStep onClose={() => setShowHighscores(false)} />;
 
-  // כעת מעבירים את ה-playerName למשחק הסולו כדי לפתור את השגיאה ולהשתמש בשם המוקלד
   if (gameMode === "solo") return <SoloGameContainer userId={userId} userName={playerName} onExit={() => setGameMode("none")} />;
   if (gameMode === "multi") return <MultiplayerGameContainer onExit={() => setGameMode("none")} />;
 
@@ -45,16 +44,22 @@ export default function TriviaApp() {
       <EntryStep 
         onJoin={async (code, name) => {
           const success = await handleJoinRoom(code, name);
-          if (success) setGameMode("multi");
+          if (success) {
+            // שמירת קוד החדר בזיכרון כדי שהקונטיינר הקבוצתי ידע לאן להתחבר
+            localStorage.setItem("trivia_room_id", code.toUpperCase().trim());
+            setGameMode("multi");
+          }
           return success;
         }} 
         onCreate={async (name, solo) => {
           setUserName(name);
-          setPlayerName(name); // שמירת השם שהוקלד כדי להעביר אותו כ-Prop
+          setPlayerName(name); 
           if (solo) {
             setGameMode("solo");
           } else {
-            await handleCreateRoom(name);
+            const newRoomId = await handleCreateRoom(name);
+            // שמירת קוד החדר החדש שנוצר
+            localStorage.setItem("trivia_room_id", newRoomId);
             setGameMode("multi");
           }
         }} 
