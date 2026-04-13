@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import questionsData from "../../src/lib/questions.json";
 
 interface QuestionType {
@@ -24,6 +24,19 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const [isFrozen, setIsFrozen] = useState(false);
   const [isSlowMo, setIsSlowMo] = useState(false);
 
+  // רפרנסים לאובייקטי האודיו
+  const cheerAudio = useRef<HTMLAudioElement | null>(null);
+  const booAudio = useRef<HTMLAudioElement | null>(null);
+
+  // טעינה מראש של קבצי הסאונד מהתיקייה הציבורית (public)
+  useEffect(() => {
+    cheerAudio.current = new Audio('/cheer.m4a');
+    booAudio.current = new Audio('/boo.m4a');
+    
+    if (cheerAudio.current) cheerAudio.current.load();
+    if (booAudio.current) booAudio.current.load();
+  }, []);
+
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 20);
     setIsRevealing(false);
@@ -33,6 +46,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setIsSlowMo(false);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
+  // לוגיקת בחירת שאלה ונעילתה (DDA) - לפי זמן הבסיס של השאלה
   const currentQuestion = useMemo(() => {
     const difficulty = roomData.difficulty || 'dynamic';
     const baseTime = roomData.timeBanks[myTeamName] || 20; 
@@ -43,6 +57,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     } else if (difficulty === 'hard') {
       targetLevel = baseTime <= 30 ? 3 : 4;
     } else {
+      // מצב משתנה (Dynamic) לפי האפיון החדש
       if (baseTime <= 10) targetLevel = 1;
       else if (baseTime <= 20) targetLevel = 2;
       else if (baseTime <= 35) targetLevel = 3;
@@ -55,6 +70,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     
     let availableQuestions = levelPool.filter(q => !askedTexts.includes(q.text));
     
+    // הגנה מפני התרוקנות המאגר באותה רמה
     if (availableQuestions.length === 0) {
       availableQuestions = levelPool; 
       if (availableQuestions.length === 0) availableQuestions = ALL_QUESTIONS;
@@ -67,29 +83,40 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
   useEffect(() => {
     if (isRevealing || isFrozen) return;
+
     if (timeLeft <= 0) {
       setHasFailed(true);
-      const audio = new Audio('/boo.m4a');
-      audio.play().catch(() => {});
+      if (booAudio.current) {
+        booAudio.current.play().catch(() => {});
+      }
       setTimeout(() => handleAnswer(false, 0, currentQuestion), 1000);
       return;
     }
+
     const tickRate = isSlowMo ? 2000 : 1000;
-    const timer = setInterval(() => setTimeLeft((prev: number) => Math.max(0, prev - 1)), tickRate);
+    const timer = setInterval(() => {
+      setTimeLeft((prev: number) => Math.max(0, prev - 1));
+    }, tickRate);
+
     return () => clearInterval(timer);
   }, [timeLeft, isRevealing, isFrozen, isSlowMo, handleAnswer, currentQuestion]);
 
   const onOptionClick = (idx: number) => {
     if (isRevealing || isFrozen) return;
     setIsRevealing(true);
+    
     const isCorrect = idx === currentQuestion.correctIdx;
     
-    // השמעת קבצי קול מהספריה הציבורית
-    const audioPath = isCorrect ? '/cheer.m4a' : '/boo.m4a';
-    const audio = new Audio(audioPath);
-    audio.play().catch(e => console.log("Audio play failed", e));
-
-    if (!isCorrect) setHasFailed(true);
+    if (isCorrect) {
+      if (cheerAudio.current) {
+        cheerAudio.current.play().catch(e => console.log("Audio play error", e));
+      }
+    } else {
+      setHasFailed(true);
+      if (booAudio.current) {
+        booAudio.current.play().catch(e => console.log("Audio play error", e));
+      }
+    }
     
     setTimeout(() => handleAnswer(isCorrect, timeLeft, currentQuestion), 1500);
   };
@@ -101,6 +128,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     const newPUs = [...currentPUs];
     newPUs.splice(newPUs.indexOf(type), 1);
     
+    // עדכון החדר עם הסרת הכוח (לוגיקה חד-פעמית)
     updateRoom({ 
       powerUps: {
         ...roomData.powerUps,
@@ -110,13 +138,13 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
     if (type === '50:50') {
       const wrongIndices = currentQuestion.options
-        .map((_, i) => i)
-        .filter(i => i !== currentQuestion.correctIdx);
+        .map((_: any, i: number) => i)
+        .filter((i: number) => i !== currentQuestion.correctIdx);
       const shuffled = wrongIndices.sort(() => 0.5 - Math.random());
       setHiddenOptions([shuffled[0], shuffled[1]]);
     } else if (type === 'freeze') {
       setIsFrozen(true);
-      // הקפאה ל-10 שניות לפי ההוראות
+      // הקפאה ל-10 שניות
       setTimeout(() => setIsFrozen(false), 10000);
     } else if (type === 'slow-mo') {
       setIsSlowMo(true);
@@ -129,17 +157,32 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress * circumference);
   
-  // חיווי צבע לשעון: כחול בהקפאה, סגול בהאטה, כתום/אדום רגיל
+  // בחירת צבע השעון לפי המצב
   const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#A855F7" : (timeLeft < 5 ? "#ef4444" : "#FF9100"));
 
   return (
     <div style={s.layout}>
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
           <circle 
-            cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" 
-            strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 60 60)" 
+            cx="60" 
+            cy="60" 
+            r={radius} 
+            fill="none" 
+            stroke="rgba(255,255,255,0.05)" 
+            strokeWidth="8" 
+          />
+          <circle 
+            cx="60" 
+            cy="60" 
+            r={radius} 
+            fill="none" 
+            stroke={clockColor} 
+            strokeWidth="8" 
+            strokeDasharray={circumference} 
+            strokeDashoffset={strokeDashoffset} 
+            strokeLinecap="round" 
+            transform="rotate(-90 60 60)" 
             style={{ 
               transition: isSlowMo ? 'stroke-dashoffset 2s linear' : 'stroke-dashoffset 1s linear', 
               filter: `drop-shadow(0 0 8px ${clockColor})` 
@@ -147,7 +190,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           />
         </svg>
         <div style={s.clockTime}>{Math.round(timeLeft)}</div>
-        {isSlowMo && <div style={s.slowMoBadge}>Slow Motion</div>}
+        {isSlowMo && <div style={s.slowMoBadge}>SLOW MOTION</div>}
       </div>
 
       <div style={s.contentArea}>
@@ -155,8 +198,15 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
             return (
-              <button key={type} onClick={() => usePowerUp(type)} disabled={count === 0 || isRevealing} style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}>
-                <span style={s.puIcon}>{type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}</span>
+              <button 
+                key={type} 
+                onClick={() => usePowerUp(type)} 
+                disabled={count === 0 || isRevealing} 
+                style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}
+              >
+                <span style={s.puIcon}>
+                  {type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}
+                </span>
                 <span style={s.puCount}>x{count}</span>
               </button>
             );
@@ -167,8 +217,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           <h2 style={s.questionText}>{currentQuestion.text}</h2>
         </div>
 
-        {/* בזמן הקפאה הקומפוננטה מציגה הודעה שהתשובות מוסתרות */}
-        <div style={{ ...s.optionsGrid, filter: isFrozen ? 'blur(8px)' : 'none', pointerEvents: isFrozen ? 'none' : 'auto' }}>
+        <div style={{ ...s.optionsGrid, visibility: isFrozen ? 'hidden' : 'visible' }}>
           {currentQuestion.options.map((opt, i) => {
             if (hiddenOptions.includes(i)) return <div key={i} style={s.hiddenPlaceholder} />;
             
@@ -186,7 +235,11 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
             }
 
             return (
-              <button key={i} onClick={() => onOptionClick(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}>
+              <button 
+                key={i} 
+                onClick={() => onOptionClick(i)} 
+                style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor }}
+              >
                 <span style={s.optionText}>{opt}</span>
                 {isRevealing && i === currentQuestion.correctIdx && <span>✅</span>}
               </button>
@@ -206,20 +259,133 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' },
-  clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '10px' },
-  clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
-  slowMoBadge: { position: 'absolute', bottom: '-20px', fontSize: '0.7rem', color: '#A855F7', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' },
-  contentArea: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px', flexShrink: 0 },
-  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
-  puIcon: { fontSize: '1rem' },
-  puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', flexShrink: 0, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
-  questionText: { fontSize: '1.2rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.3', margin: 0 },
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0, transition: 'filter 0.3s ease' },
-  optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', color: 'white', textAlign: 'right', backgroundColor: 'transparent' },
-  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  hiddenPlaceholder: { height: '55px' },
-  freezeOverlay: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', pointerEvents: 'none', textShadow: '0 0 10px rgba(0,229,255,0.5)' }
+  layout: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    height: '100dvh', 
+    backgroundColor: '#05081c', 
+    color: 'white', 
+    padding: '15px', 
+    direction: 'rtl', 
+    alignItems: 'center', 
+    boxSizing: 'border-box', 
+    overflow: 'hidden' 
+  },
+  clockContainer: { 
+    position: 'relative', 
+    width: '120px', 
+    height: '120px', 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    flexShrink: 0, 
+    marginTop: '10px' 
+  },
+  clockTime: { 
+    position: 'absolute', 
+    fontSize: '2.8rem', 
+    fontWeight: '900', 
+    color: 'white', 
+    fontFamily: 'monospace' 
+  },
+  slowMoBadge: { 
+    position: 'absolute', 
+    bottom: '-20px', 
+    fontSize: '0.7rem', 
+    color: '#A855F7', 
+    fontWeight: 'bold', 
+    textTransform: 'uppercase', 
+    letterSpacing: '1px' 
+  },
+  contentArea: { 
+    position: 'relative', 
+    flex: 1, 
+    display: 'flex', 
+    flexDirection: 'column', 
+    width: '100%', 
+    maxWidth: '600px', 
+    gap: '15px', 
+    padding: '10px 5px', 
+    boxSizing: 'border-box' 
+  },
+  powerUpsRow: { 
+    display: 'flex', 
+    justifyContent: 'center', 
+    gap: '10px', 
+    marginBottom: '10px', 
+    flexShrink: 0 
+  },
+  puBtn: { 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    border: '1px solid rgba(255,255,255,0.1)', 
+    borderRadius: '12px', 
+    padding: '8px 12px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '6px', 
+    cursor: 'pointer', 
+    color: 'white' 
+  },
+  puIcon: { 
+    fontSize: '1rem' 
+  },
+  puCount: { 
+    fontSize: '0.8rem', 
+    fontWeight: 'bold' 
+  },
+  questionCard: { 
+    backgroundColor: 'rgba(255,255,255,0.02)', 
+    borderRadius: '20px', 
+    padding: '20px', 
+    textAlign: 'center', 
+    border: '1px solid rgba(0,229,255,0.1)', 
+    flexShrink: 0, 
+    boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
+  },
+  questionText: { 
+    fontSize: '1.2rem', 
+    fontWeight: 'bold', 
+    color: '#FF9100', 
+    lineHeight: '1.3', 
+    margin: 0 
+  },
+  optionsGrid: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    gap: '10px', 
+    flexShrink: 0,
+    transition: 'opacity 0.3s ease'
+  },
+  optionBtn: { 
+    border: '2px solid', 
+    borderRadius: '15px', 
+    padding: '15px', 
+    cursor: 'pointer', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    transition: 'all 0.2s', 
+    color: 'white', 
+    textAlign: 'right', 
+    backgroundColor: 'transparent' 
+  },
+  optionText: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
+  hiddenPlaceholder: { 
+    height: '55px' 
+  },
+  freezeOverlay: { 
+    position: 'absolute', 
+    top: '50%', 
+    left: '50%', 
+    transform: 'translate(-50%, -50%)', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    gap: '5px', 
+    pointerEvents: 'none', 
+    textShadow: '0 0 10px rgba(0,229,255,0.5)' 
+  }
 };

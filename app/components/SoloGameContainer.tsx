@@ -18,6 +18,7 @@ interface SoloGameContainerProps {
 export default function SoloGameContainer({ userId, userName, onExit }: SoloGameContainerProps) {
   const [step, setStep] = useState(4);
   const [finalScore, setFinalScore] = useState(0); 
+  const [lastPU, setLastPU] = useState<string>(""); 
 
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
@@ -42,7 +43,9 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
 
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
     let score = 0;
+    
     if (isVictory) {
+      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
       const accuracy = correctCount / questionsAsked;
       score = (12 / questionsAsked) * 10000 * accuracy;
     } else {
@@ -70,7 +73,10 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       gameId: gameId
     };
 
+    // שמירה לענן
     push(ref(db, 'highscores'), scoreData);
+
+    // שמירה מקומית
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
     localScores.push(scoreData);
     localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
@@ -107,7 +113,15 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const powers = ['50:50', 'freeze', 'slow-mo'];
       const randomPU = powers[Math.floor(Math.random() * 3)];
-      updatedData.powerUps = { [userName]: [...(roomData.powerUps[userName] || []), randomPU] };
+      
+      setLastPU(randomPU); 
+      
+      updatedData.powerUps = { 
+        ...roomData.powerUps, 
+        [userName]: [...(roomData.powerUps[userName] || []), randomPU] 
+      };
+      updatedData.lastGrantedPowerUp = randomPU;
+      
       setRoomData(updatedData);
       setStep(8);
     } else {
@@ -125,7 +139,8 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       timeBanks: { [userName]: 20 },
       powerUps: { [userName]: [] },
       seed: Math.floor(Math.random() * 100),
-      lastCorrect: false
+      lastCorrect: false,
+      lastGrantedPowerUp: null
     }));
     setFinalScore(0);
     setStep(4);
@@ -136,20 +151,74 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       <button 
         onClick={onExit} 
         style={{ 
-          position: 'absolute', top: '20px', left: '20px', 
-          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
-          color: 'white', borderRadius: '50%', width: '40px', height: '40px', 
-          fontSize: '1.2rem', zIndex: 100, cursor: 'pointer', 
-          display: 'flex', alignItems: 'center', justifyContent: 'center' 
+          position: 'absolute', 
+          top: '20px', 
+          left: '20px', 
+          background: 'rgba(255,255,255,0.1)', 
+          border: '1px solid rgba(255,255,255,0.2)', 
+          color: 'white', 
+          borderRadius: '50%', 
+          width: '40px', 
+          height: '40px', 
+          fontSize: '1.2rem', 
+          zIndex: 100, 
+          cursor: 'pointer', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center' 
         }}
-      >✕</button>
+      >
+        ✕
+      </button>
 
-      {step === 4 && <CountdownStep timer={roomData.preGameTimer || 3} onComplete={() => setStep(5)} />}
-      {step === 5 && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} onDirectStepChange={(s: number) => setStep(s)} />}
-      {step === 6 && <ScoreStep roomData={roomData} onNext={() => setStep(5)} />}
-      {step === 7 && <VictoryStep winnerName={userName} score={finalScore} onRestart={onRestart} />}
-      {step === 8 && <CheckpointStep roomData={roomData} userId={userId} updateRoom={updateRoom} onComplete={() => setStep(5)} />}
-      {step === 9 && <LoseStep score={finalScore} onRestart={onRestart} />}
+      {step === 4 && (
+        <CountdownStep 
+          timer={roomData.preGameTimer || 3} 
+          onComplete={() => setStep(5)} 
+        />
+      )}
+      
+      {step === 5 && (
+        <GameStep 
+          roomData={roomData} 
+          userId={userId} 
+          updateRoom={updateRoom} 
+          handleAnswer={handleAnswer} 
+          onDirectStepChange={(s: number) => setStep(s)} 
+        />
+      )}
+      
+      {step === 6 && (
+        <ScoreStep 
+          roomData={roomData} 
+          onNext={() => setStep(5)} 
+        />
+      )}
+      
+      {step === 7 && (
+        <VictoryStep 
+          winnerName={userName} 
+          score={finalScore} 
+          onRestart={onRestart} 
+        />
+      )}
+      
+      {step === 8 && (
+        <CheckpointStep 
+          roomData={roomData} 
+          userId={userId} 
+          updateRoom={updateRoom} 
+          forcedPowerUp={lastPU} 
+          onComplete={() => setStep(5)} 
+        />
+      )}
+      
+      {step === 9 && (
+        <LoseStep 
+          score={finalScore} 
+          onRestart={onRestart} 
+        />
+      )}
     </div>
   );
 }
