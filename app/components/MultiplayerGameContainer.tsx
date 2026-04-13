@@ -19,16 +19,11 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
 
   if (!roomData) return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>טוען נתוני חדר...</div>;
 
-  const handleExitWithCleanup = () => {
-    onExit();
-  };
-
   return (
     <div style={{ position: 'relative', height: '100dvh' }}>
-      {/* כפתור יציאה שמופיע רק בשלבים הרלוונטיים */}
       {step >= 3 && (
         <button 
-          onClick={handleExitWithCleanup} 
+          onClick={onExit} 
           style={{ 
             position: 'absolute', top: '20px', left: '20px', 
             background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
@@ -59,7 +54,7 @@ export default function MultiplayerGameContainer({ onExit }: MultiplayerGameCont
           userId={userId} 
           updateRoom={updateRoom} 
           onNext={() => {
-            // לוגיקת הניתוב המתוקנת: בודקים אם השאלה הבאה היא צ'קפוינט
+            // בדיקת ניתוב: האם השאלה הבאה היא צ'קפוינט?
             if (roomData.isCheckpointNext) {
               updateRoom({ step: 8, isCheckpointNext: false });
             } else {

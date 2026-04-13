@@ -28,20 +28,16 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
   }, [roomData.timeBanks, myTeamName]);
 
-  // לוגיקת בחירת שאלה עם סינון כפילויות
+  // לוגיקת בחירת שאלה חכמה
   const currentLevel = Math.min(Math.floor((roomData.currentQuestionIdx || 0) / 2) + 1, 10);
-  
-  // 1. סינון לפי רמה
   const levelQuestions = ALL_QUESTIONS.filter(q => q.level === currentLevel);
-  
-  // 2. סינון שאלות שכבר נשאלו בסבב הנוכחי
   const askedTexts = roomData.askedQuestions || [];
   const availableQuestions = levelQuestions.filter(q => !askedTexts.includes(q.text));
   
-  // 3. בחירת מאגר: אם נגמרו השאלות ברמה הזו, נשתמש בכל הרמה (למניעת קריסה), אחרת רק בחדשות
+  // הגנה מפני תקיעה בשאלה השמינית: אם אין שאלות חדשות, נשתמש בכל מאגר הרמה
   const pool = availableQuestions.length > 0 ? availableQuestions : levelQuestions;
   
-  // 4. בחירת השאלה הספציפית
+  // בחירת שאלה יציבה מבוססת Seed
   const questionIdx = (roomData.seed + (roomData.currentQuestionIdx || 0)) % pool.length;
   const currentQuestion = pool[questionIdx];
 
@@ -109,6 +105,21 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
         }} />
       </div>
 
+      {/* מיקום כוחות מעודכן - מתחת לטיימר כפי שביקשת */}
+      <div style={s.powerUpsSection}>
+        <div style={s.powerUpsRow}>
+          {['50:50', 'freeze', 'slow-mo'].map(type => {
+            const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
+            return (
+              <button key={type} onClick={() => usePowerUp(type)} disabled={count === 0 || isRevealing} style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}>
+                <span style={s.puIcon}>{type === '50:50' ? '🌓' : type === 'freeze' ? '❄️' : '⏳'}</span>
+                <span style={s.puCount}>x{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div style={s.questionCard}>
         <h2 style={s.questionText}>{currentQuestion.text}</h2>
       </div>
@@ -138,46 +149,30 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
           );
         })}
       </div>
-
-      <div style={s.footer}>
-        <div style={s.powerUpLabel}>בונוסים זמינים:</div>
-        <div style={s.powerUpsRow}>
-          {['50:50', 'freeze', 'slow-mo'].map(type => {
-            const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
-            return (
-              <button key={type} onClick={() => usePowerUp(type)} disabled={count === 0 || isRevealing} style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}>
-                <span style={s.puIcon}>{type === '50:50' ? '🌓' : type === 'freeze' ? '❄️' : '⏳'}</span>
-                <span style={s.puCount}>x{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '20px', boxSizing: 'border-box', direction: 'rtl' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', boxSizing: 'border-box', direction: 'rtl' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
   teamInfo: { display: 'flex', flexDirection: 'column' },
-  teamName: { fontSize: '1.2rem', fontWeight: 'bold', color: '#00E5FF' },
-  scoreBadge: { fontSize: '1.5rem', fontWeight: '900', color: 'white' },
+  teamName: { fontSize: '1.1rem', fontWeight: 'bold', color: '#00E5FF' },
+  scoreBadge: { fontSize: '1.4rem', fontWeight: '900', color: 'white' },
   progressContainer: { textAlign: 'left' },
-  levelText: { fontSize: '0.9rem', color: '#FF9100' },
-  qCounter: { fontSize: '0.8rem', opacity: 0.6 },
-  timerBarContainer: { width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '30px', overflow: 'hidden' },
+  levelText: { fontSize: '0.8rem', color: '#FF9100' },
+  qCounter: { fontSize: '0.7rem', opacity: 0.6 },
+  timerBarContainer: { width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '15px', overflow: 'hidden' },
   timerBar: { height: '100%', transition: 'all 1s linear' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '25px', padding: '30px', marginBottom: '25px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' },
-  questionText: { fontSize: '1.4rem', fontWeight: 'bold', lineHeight: '1.4' },
-  optionsGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '12px', flex: 1 },
-  optionBtn: { border: '2px solid', borderRadius: '18px', padding: '18px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', color: 'white', textAlign: 'right' },
-  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  hiddenPlaceholder: { height: '60px' },
-  footer: { marginTop: 'auto', padding: '20px 0' },
-  powerUpLabel: { fontSize: '0.9rem', opacity: 0.6, marginBottom: '10px', textAlign: 'center' },
-  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '15px' },
-  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'white' },
-  puIcon: { fontSize: '1.2rem' },
-  puCount: { fontSize: '0.9rem', fontWeight: 'bold' }
+  powerUpsSection: { marginBottom: '20px' },
+  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px' },
+  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
+  puIcon: { fontSize: '1rem' },
+  puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
+  questionCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '20px', padding: '20px', marginBottom: '15px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
+  questionText: { fontSize: '1.2rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.3', margin: 0 },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, overflowY: 'auto' },
+  optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', color: 'white', textAlign: 'right', backgroundColor: 'transparent' },
+  optionText: { fontSize: '1rem', fontWeight: 'bold' },
+  hiddenPlaceholder: { height: '55px' }
 };

@@ -31,8 +31,10 @@ export default function TriviaApp() {
 
   if (!mounted) return null;
 
-  // הצגת חלונות עזר (חוקים ושיאים)
-  if (showRules) return <RulesStep onStart={() => setShowRules(false)} />;
+  // חלון חוקים - לחיצה מעבירה אוטומטית לשיאים
+  if (showRules) return <RulesStep onStart={() => { setShowRules(false); setShowHighscores(true); }} />;
+  
+  // חלון שיאים
   if (showHighscores) return <HighscoresStep onClose={() => setShowHighscores(false)} />;
 
   // ניתוב לקונטיינר הנבחר
@@ -50,8 +52,9 @@ export default function TriviaApp() {
         }} 
         onCreate={async (name, solo) => {
           setUserName(name);
-          if (solo) setGameMode("solo");
-          else {
+          if (solo) {
+            setGameMode("solo");
+          } else {
             await handleCreateRoom(name);
             setGameMode("multi");
           }

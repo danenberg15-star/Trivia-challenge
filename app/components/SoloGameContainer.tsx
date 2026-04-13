@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { db } from "../../src/lib/firebase"; 
 import { ref, push } from "firebase/database"; 
-import SetupStep from "./SetupStep";
 import CountdownStep from "./CountdownStep";
 import GameStep from "./GameStep";
 import ScoreStep from "./ScoreStep";
@@ -16,7 +15,8 @@ interface SoloGameContainerProps {
 }
 
 export default function SoloGameContainer({ userId, onExit }: SoloGameContainerProps) {
-  const [step, setStep] = useState(3);
+  // התחלה ישירה משלב 4 (Countdown) ללא מסך Setup כפי שביקשת
+  const [step, setStep] = useState(4);
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
     gameMode: 'individual',
@@ -28,7 +28,8 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     powerUps: { [localStorage.getItem('trivia_user_name') || 'שחקן']: [] },
     currentQuestionIdx: 0,
     seed: Math.floor(Math.random() * 100),
-    votes: {}
+    votes: {},
+    preGameTimer: 3
   });
 
   const updateRoom = (updates: any) => {
@@ -42,7 +43,6 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     const newTime = Math.max(0, timeAtAnswer + timeChange);
     const nextIdx = roomData.currentQuestionIdx + 1;
     
-    // עדכון רשימת השאלות שנשאלו
     const updatedAsked = [...(roomData.askedQuestions || []), questionObj.text];
 
     const updatedData = { 
@@ -55,7 +55,6 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     };
 
     if (newTime >= 60) {
-      // תיקון: שמירת השיא ב-Firebase
       push(ref(db, 'highscores'), {
         name: me.name,
         score: newTime,
@@ -63,10 +62,10 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
         difficulty: roomData.difficulty
       });
       setRoomData({ ...updatedData, winnerName: me.name });
-      setStep(7); // Victory
+      setStep(7);
     } else if (newTime <= 0) {
       setRoomData(updatedData);
-      setStep(9); // Lose
+      setStep(9);
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const powers = ['50:50', 'freeze', 'slow-mo'];
       const randomPU = powers[Math.floor(Math.random() * powers.length)];
@@ -88,7 +87,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       timeBanks: { [roomData.players[0].name]: 20 },
       powerUps: { [roomData.players[0].name]: [] },
       seed: Math.floor(Math.random() * 100),
-      step: 4
+      preGameTimer: 3
     });
     setStep(4);
   };
@@ -106,7 +105,6 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
         }}
       >✕</button>
 
-      {step === 3 && <SetupStep roomData={roomData} userId={userId} updateRoom={updateRoom} onStart={() => updateRoom({ step: 4, preGameTimer: 3 })} />}
       {step === 4 && <CountdownStep timer={roomData.preGameTimer || 3} onComplete={() => setStep(5)} />}
       {step === 5 && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} onDirectStepChange={(s: number) => setStep(s)} />}
       {step === 6 && <ScoreStep roomData={roomData} onNext={() => setStep(5)} />}
