@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { db } from "../../src/lib/firebase"; 
 import { ref, push } from "firebase/database"; 
 import CountdownStep from "./CountdownStep";
@@ -11,24 +11,13 @@ import LoseStep from "./LoseStep";
 
 interface SoloGameContainerProps {
   userId: string;
+  userName: string; 
   onExit: () => void;
 }
 
-export default function SoloGameContainer({ userId, onExit }: SoloGameContainerProps) {
+export default function SoloGameContainer({ userId, userName, onExit }: SoloGameContainerProps) {
   const [step, setStep] = useState(4);
   const [finalScore, setFinalScore] = useState(0); 
-  const [displayName, setDisplayName] = useState(""); 
-
-  // משיכה ישירה ומדויקת של השם שהמשתמש הזין ללא סריקות מיותרות
-  const getExactUserName = () => {
-    if (typeof window === 'undefined') return "שחקן";
-    
-    const name = localStorage.getItem('trivia_user_name');
-    if (name && name.trim() !== "") {
-      return name;
-    }
-    return "שחקן";
-  };
 
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
@@ -38,10 +27,10 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     correctCount: 0,
     currentQuestionIdx: 0,
     seed: Math.floor(Math.random() * 100),
-    timeBanks: { "player": 20 },
-    powerUps: { "player": [] },
-    players: [{ id: userId, name: "player", teamIdx: 0 }],
-    teamNames: ["player"],
+    timeBanks: { [userName]: 20 },
+    powerUps: { [userName]: [] },
+    players: [{ id: userId, name: userName, teamIdx: 0 }],
+    teamNames: [userName],
     preGameTimer: 3,
     lastCorrect: false
   });
@@ -52,12 +41,8 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   };
 
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
-    const actualName = getExactUserName();
-    setDisplayName(actualName);
-
     let score = 0;
     if (isVictory) {
-      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
       const accuracy = correctCount / questionsAsked;
       score = (12 / questionsAsked) * 10000 * accuracy;
     } else {
@@ -78,17 +63,14 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     const gameId = `solo_${userId}_${timestamp}`; 
 
     const scoreData = {
-      name: actualName,
+      name: userName,
       score: finalResult,
       date: timestamp,
       difficulty: difficultyLabel,
       gameId: gameId
     };
 
-    // שמירה לענן
     push(ref(db, 'highscores'), scoreData);
-
-    // שמירה מקומית
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
     localScores.push(scoreData);
     localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
@@ -107,7 +89,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
 
     const updatedData = { 
       ...roomData, 
-      timeBanks: { "player": newTime }, 
+      timeBanks: { [userName]: newTime }, 
       currentQuestionIdx: nextIdx, 
       correctCount: newCorrectCount,
       lastCorrect: isCorrect,
@@ -125,7 +107,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     } else if (nextIdx > 0 && nextIdx % 5 === 0) {
       const powers = ['50:50', 'freeze', 'slow-mo'];
       const randomPU = powers[Math.floor(Math.random() * 3)];
-      updatedData.powerUps = { "player": [...(roomData.powerUps["player"] || []), randomPU] };
+      updatedData.powerUps = { [userName]: [...(roomData.powerUps[userName] || []), randomPU] };
       setRoomData(updatedData);
       setStep(8);
     } else {
@@ -140,8 +122,8 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       askedQuestions: [],
       currentQuestionIdx: 0,
       correctCount: 0,
-      timeBanks: { "player": 20 },
-      powerUps: { "player": [] },
+      timeBanks: { [userName]: 20 },
+      powerUps: { [userName]: [] },
       seed: Math.floor(Math.random() * 100),
       lastCorrect: false
     }));
@@ -165,7 +147,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       {step === 4 && <CountdownStep timer={roomData.preGameTimer || 3} onComplete={() => setStep(5)} />}
       {step === 5 && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} onDirectStepChange={(s: number) => setStep(s)} />}
       {step === 6 && <ScoreStep roomData={roomData} onNext={() => setStep(5)} />}
-      {step === 7 && <VictoryStep winnerName={displayName} score={finalScore} onRestart={onRestart} />}
+      {step === 7 && <VictoryStep winnerName={userName} score={finalScore} onRestart={onRestart} />}
       {step === 8 && <CheckpointStep roomData={roomData} userId={userId} updateRoom={updateRoom} onComplete={() => setStep(5)} />}
       {step === 9 && <LoseStep score={finalScore} onRestart={onRestart} />}
     </div>
