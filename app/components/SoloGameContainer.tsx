@@ -17,8 +17,9 @@ interface SoloGameContainerProps {
 export default function SoloGameContainer({ userId, onExit }: SoloGameContainerProps) {
   const [step, setStep] = useState(4);
   const [finalScore, setFinalScore] = useState(0); 
-  const [displayName, setDisplayName] = useState(""); // לצורך תצוגה בלבד במסך הסיום
+  const [displayName, setDisplayName] = useState(""); 
 
+  // שימוש במפתח פנימי קבוע "player" כדי למנוע קריסות ובעיות סנכרון שם
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
     gameMode: 'individual',
@@ -30,7 +31,9 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
     timeBanks: { "player": 20 },
     powerUps: { "player": [] },
     players: [{ id: userId, name: "player", teamIdx: 0 }],
-    preGameTimer: 3
+    teamNames: ["player"], // שדה הכרחי למניעת קריסה
+    preGameTimer: 3,
+    lastCorrect: false
   });
 
   const updateRoom = (updates: any) => {
@@ -39,20 +42,18 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
   };
 
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
-    // משיכה ישירה מהאחסון ברגע האמת - הכי בטוח שיש
+    // שליפת השם האמיתי מהדיסק רק בסיום המשחק
     const savedName = localStorage.getItem('trivia_user_name') || "אורח";
     setDisplayName(savedName);
 
     let score = 0;
     if (isVictory) {
-      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
       const accuracy = correctCount / questionsAsked;
       score = (12 / questionsAsked) * 10000 * accuracy;
     } else {
       score = correctCount * 10;
     }
 
-    // מכפילי קושי ותוויות
     let difficultyLabel = "רמה משתנה";
     if (roomData.difficulty === 'easy') {
       score = score / 4;
@@ -64,7 +65,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
 
     const finalResult = Math.max(0, Math.round(score));
     const timestamp = Date.now();
-    const gameId = `${userId}_${timestamp}`; // מזהה ייחודי למניעת כפילויות
+    const gameId = `${userId}_${timestamp}`; 
 
     const scoreData = {
       name: savedName,
@@ -74,10 +75,8 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       gameId: gameId
     };
 
-    // שמירה לענן
+    // שמירה כפולה עם אותו gameId
     push(ref(db, 'highscores'), scoreData);
-
-    // שמירה מקומית
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
     localScores.push(scoreData);
     localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
@@ -99,6 +98,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       timeBanks: { "player": newTime }, 
       currentQuestionIdx: nextIdx, 
       correctCount: newCorrectCount,
+      lastCorrect: isCorrect, // שדה הכרחי ל-ScoreStep
       askedQuestions: updatedAsked
     };
 
@@ -130,7 +130,8 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       correctCount: 0,
       timeBanks: { "player": 20 },
       powerUps: { "player": [] },
-      seed: Math.floor(Math.random() * 100)
+      seed: Math.floor(Math.random() * 100),
+      lastCorrect: false
     }));
     setFinalScore(0);
     setStep(4);
@@ -150,15 +151,7 @@ export default function SoloGameContainer({ userId, onExit }: SoloGameContainerP
       >✕</button>
 
       {step === 4 && <CountdownStep timer={roomData.preGameTimer || 3} onComplete={() => setStep(5)} />}
-      {step === 5 && (
-        <GameStep 
-          roomData={roomData} 
-          userId={userId} 
-          updateRoom={updateRoom} 
-          handleAnswer={handleAnswer} 
-          onDirectStepChange={(s: number) => setStep(s)} 
-        />
-      )}
+      {step === 5 && <GameStep roomData={roomData} userId={userId} updateRoom={updateRoom} handleAnswer={handleAnswer} onDirectStepChange={(s: number) => setStep(s)} />}
       {step === 6 && <ScoreStep roomData={roomData} onNext={() => setStep(5)} />}
       {step === 7 && <VictoryStep winnerName={displayName} score={finalScore} onRestart={onRestart} />}
       {step === 8 && <CheckpointStep roomData={roomData} userId={userId} updateRoom={updateRoom} onComplete={() => setStep(5)} />}
