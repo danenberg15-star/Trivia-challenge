@@ -20,7 +20,6 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   const [finalScore, setFinalScore] = useState(0); 
   const [lastPU, setLastPU] = useState<string>(""); 
 
-  // יצירת מזהה ייחודי למשחק הנוכחי - לא משתנה לאורך כל הסשן
   const [gameId] = useState(() => Math.random().toString(36).substring(2, 11));
 
   const [roomData, setRoomData] = useState<any>({
@@ -31,7 +30,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     correctCount: 0,
     currentQuestionIdx: 0,
     seed: Math.floor(Math.random() * 100),
-    timeBanks: { [userName]: 20 },
+    timeBanks: { [userName]: 20 }, // מתחיל ב-20 שניות
     powerUps: { [userName]: [] },
     players: [{ id: userId, name: userName, teamIdx: 0 }],
     teamNames: [userName],
@@ -41,7 +40,6 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     isCheckpointNext: false
   });
 
-  // פונקציה לשמירת הניקוד בזמן אמת
   const saveLiveScore = (score: number) => {
     if (score <= 0) return;
 
@@ -53,20 +51,14 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       gameId: gameId
     };
 
-    // 1. שמירה ב-Firebase - דריסה של הרשומה לפי gameId
     const scoreRef = ref(db, `highscores/${gameId}`);
     set(scoreRef, scoreEntry);
 
-    // 2. שמירה ב-LocalStorage - דריסה לפי gameId
     try {
       const localData = localStorage.getItem('trivia_solo_highscores');
       let localScores = localData ? JSON.parse(localData) : [];
-      
-      // הסרת גרסה קודמת של אותו משחק
       localScores = localScores.filter((s: any) => s.gameId !== gameId);
       localScores.push(scoreEntry);
-      
-      // מיון ושמירה של ה-20 הטובים ביותר
       localScores.sort((a: any, b: any) => b.score - a.score);
       localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(0, 20)));
     } catch (e) {
@@ -75,19 +67,45 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   };
 
   const handleAnswer = (isCorrect: boolean) => {
+    if (step === 7 || step === 9) return;
+
+    const currentTime = roomData.timeBanks[userName] || 0;
+    
+    // בדיוק לפי האפיון: +5 לנכונה, -2 לשגויה
+    const newTime = isCorrect ? currentTime + 5 : Math.max(currentTime - 2, 0);
     const newCorrectCount = isCorrect ? roomData.correctCount + 1 : roomData.correctCount;
+    const currentScore = newCorrectCount * 10;
+
+    // תנאי ניצחון: הגעה ל-60 שניות
+    if (newTime >= 60) {
+      setFinalScore(currentScore);
+      saveLiveScore(currentScore);
+      setRoomData({ ...roomData, correctCount: newCorrectCount, timeBanks: { ...roomData.timeBanks, [userName]: 60 } });
+      setStep(7); // מעבר למסך ניצחון
+      return;
+    }
+
+    // תנאי הפסד: הגעה ל-0 שניות בגלל טעות
+    if (newTime <= 0) {
+      setFinalScore(currentScore);
+      saveLiveScore(currentScore);
+      setRoomData({ ...roomData, correctCount: newCorrectCount, timeBanks: { ...roomData.timeBanks, [userName]: 0 } });
+      setStep(9); // מעבר למסך הפסד
+      return;
+    }
+    
     const isCheckpoint = (newCorrectCount > 0 && newCorrectCount % 5 === 0 && isCorrect);
     
-    // חישוב ניקוד עדכני
     if (isCorrect) {
-      saveLiveScore(newCorrectCount * 10);
+      saveLiveScore(currentScore);
     }
 
     const update = {
       correctCount: newCorrectCount,
       lastCorrect: isCorrect,
       isCheckpointNext: isCheckpoint,
-      currentQuestionIdx: roomData.currentQuestionIdx + 1
+      currentQuestionIdx: roomData.currentQuestionIdx + 1,
+      timeBanks: { ...roomData.timeBanks, [userName]: newTime }
     };
 
     if (isCheckpoint) {
@@ -99,7 +117,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       setRoomData({
         ...roomData,
         ...update,
-        lastGrantedPowerUp: randomPU, // שורה שהתווספה כדי שהצ'ק פוינט יידע איזה כוח להציג
+        lastGrantedPowerUp: randomPU,
         powerUps: { ...roomData.powerUps, [userName]: [...currentPUs, randomPU] }
       });
       setStep(8); 
@@ -110,11 +128,13 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   };
 
   const updateRoom = (newData: any) => {
-    // בדיקת סוף משחק בגלל זמן
+    // תנאי הפסד: הזמן נגמר באופן טבעי (טיק של השעון)
     if (newData.timeBanks && newData.timeBanks[userName] <= 0) {
+      if (step === 9 || step === 7) return; 
       const score = roomData.correctCount * 10;
       setFinalScore(score);
       saveLiveScore(score); 
+      setRoomData({ ...newData, timeBanks: { ...newData.timeBanks, [userName]: 0 } });
       setStep(9);
       return;
     }
