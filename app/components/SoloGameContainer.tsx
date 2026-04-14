@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db } from "../../src/lib/firebase"; 
-import { ref, push } from "firebase/database"; 
+import { ref, set } from "firebase/database"; 
 import CountdownStep from "./CountdownStep";
 import GameStep from "./GameStep";
 import ScoreStep from "./ScoreStep";
@@ -20,6 +20,9 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   const [finalScore, setFinalScore] = useState(0); 
   const [lastPU, setLastPU] = useState<string>(""); 
 
+  // יצירת מזהה ייחודי למשחק הנוכחי - לא משתנה לאורך כל הסשן
+  const [gameId] = useState(() => Math.random().toString(36).substring(2, 11));
+
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
     gameMode: 'individual',
@@ -33,129 +36,110 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     players: [{ id: userId, name: userName, teamIdx: 0 }],
     teamNames: [userName],
     preGameTimer: 3,
-    lastCorrect: false
+    lastCorrect: false,
+    lastQuestion: null,
+    isCheckpointNext: false
   });
 
-  const updateRoom = (updates: any) => {
-    setRoomData((prev: any) => ({ ...prev, ...updates }));
-    if (updates.step !== undefined) setStep(updates.step);
-  };
+  // פונקציה לשמירת הניקוד בזמן אמת
+  const saveLiveScore = (score: number) => {
+    if (score <= 0) return;
 
-  const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
-    let score = 0;
-    
-    if (isVictory) {
-      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
-      const accuracy = correctCount / questionsAsked;
-      score = (12 / questionsAsked) * 10000 * accuracy;
-    } else {
-      score = correctCount * 10;
-    }
-
-    let difficultyLabel = "רמה משתנה";
-    if (roomData.difficulty === 'easy') {
-      score = score / 4;
-      difficultyLabel = "קל";
-    } else if (roomData.difficulty === 'hard') {
-      score = score * 2;
-      difficultyLabel = "קשה";
-    }
-
-    const finalResult = Math.max(0, Math.round(score));
-    const timestamp = Date.now();
-    const gameId = `solo_${userId}_${timestamp}`; 
-
-    const scoreData = {
-      name: userName,
-      score: finalResult,
-      date: timestamp,
-      difficulty: difficultyLabel,
+    const scoreEntry = {
+      name: userName || "אורח",
+      score: score,
+      date: Date.now(),
+      difficulty: "Dynamic",
       gameId: gameId
     };
 
-    // שמירה לענן
-    push(ref(db, 'highscores'), scoreData);
+    // 1. שמירה ב-Firebase - דריסה של הרשומה לפי gameId
+    const scoreRef = ref(db, `highscores/${gameId}`);
+    set(scoreRef, scoreEntry);
 
-    // שמירה מקומית
-    const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
-    localScores.push(scoreData);
-    localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
-
-    return finalResult;
-  };
-
-  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any) => {
-    const timeChange = isCorrect ? 5 : -2;
-    const newTime = Math.max(0, timeAtAnswer + timeChange);
-    const nextIdx = roomData.currentQuestionIdx + 1;
-    const newCorrectCount = isCorrect ? (roomData.correctCount || 0) + 1 : (roomData.correctCount || 0);
-    
-    const questionText = typeof questionObj === 'string' ? questionObj : questionObj?.text;
-    const updatedAsked = [...(roomData.askedQuestions || []), questionText];
-
-    const updatedData = { 
-      ...roomData, 
-      timeBanks: { [userName]: newTime }, 
-      currentQuestionIdx: nextIdx, 
-      correctCount: newCorrectCount,
-      lastCorrect: isCorrect,
-      askedQuestions: updatedAsked
-    };
-
-    if (newTime >= 60) {
-      const score = calculateAndSaveScore(true, nextIdx, newCorrectCount);
-      setFinalScore(score);
-      setStep(7);
-    } else if (newTime <= 0) {
-      const score = calculateAndSaveScore(false, nextIdx, newCorrectCount);
-      setFinalScore(score);
-      setStep(9);
-    } else if (nextIdx > 0 && nextIdx % 5 === 0) {
-      const powers = ['50:50', 'freeze', 'slow-mo'];
-      const randomPU = powers[Math.floor(Math.random() * 3)];
+    // 2. שמירה ב-LocalStorage - דריסה לפי gameId
+    try {
+      const localData = localStorage.getItem('trivia_solo_highscores');
+      let localScores = localData ? JSON.parse(localData) : [];
       
-      setLastPU(randomPU); 
+      // הסרת גרסה קודמת של אותו משחק
+      localScores = localScores.filter((s: any) => s.gameId !== gameId);
+      localScores.push(scoreEntry);
       
-      updatedData.powerUps = { 
-        ...roomData.powerUps, 
-        [userName]: [...(roomData.powerUps[userName] || []), randomPU] 
-      };
-      updatedData.lastGrantedPowerUp = randomPU;
-      
-      setRoomData(updatedData);
-      setStep(8);
-    } else {
-      setRoomData(updatedData);
-      setStep(6);
+      // מיון ושמירה של ה-20 הטובים ביותר
+      localScores.sort((a: any, b: any) => b.score - a.score);
+      localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(0, 20)));
+    } catch (e) {
+      console.error("Failed to save local score", e);
     }
   };
 
+  const handleAnswer = (isCorrect: boolean) => {
+    const newCorrectCount = isCorrect ? roomData.correctCount + 1 : roomData.correctCount;
+    const isCheckpoint = (newCorrectCount > 0 && newCorrectCount % 5 === 0 && isCorrect);
+    
+    // חישוב ניקוד עדכני (לפי הלוגיקה הקיימת של 10 נקודות לשאלה)
+    if (isCorrect) {
+      saveLiveScore(newCorrectCount * 10);
+    }
+
+    const update = {
+      correctCount: newCorrectCount,
+      lastCorrect: isCorrect,
+      isCheckpointNext: isCheckpoint,
+      currentQuestionIdx: roomData.currentQuestionIdx + 1
+    };
+
+    if (isCheckpoint) {
+      const allPUs = ['50:50', 'freeze', 'slow-mo'];
+      const randomPU = allPUs[Math.floor(Math.random() * allPUs.length)];
+      setLastPU(randomPU);
+      
+      const currentPUs = roomData.powerUps[userName] || [];
+      setRoomData({
+        ...roomData,
+        ...update,
+        powerUps: { ...roomData.powerUps, [userName]: [...currentPUs, randomPU] }
+      });
+      setStep(8); 
+    } else {
+      setRoomData({ ...roomData, ...update });
+      setStep(6); 
+    }
+  };
+
+  const updateRoom = (newData: any) => {
+    // בדיקת סוף משחק בגלל זמן
+    if (newData.timeBanks && newData.timeBanks[userName] <= 0) {
+      const score = roomData.correctCount * 10;
+      setFinalScore(score);
+      saveLiveScore(score); // שמירה סופית במקרה של הפסד זמן
+      setStep(9);
+      return;
+    }
+    setRoomData(newData);
+  };
+
   const onRestart = () => {
-    setRoomData((prev: any) => ({
-      ...prev,
-      askedQuestions: [],
-      currentQuestionIdx: 0,
-      correctCount: 0,
-      timeBanks: { [userName]: 20 },
-      powerUps: { [userName]: [] },
-      seed: Math.floor(Math.random() * 100),
-      lastCorrect: false,
-      lastGrantedPowerUp: null
-    }));
-    setFinalScore(0);
-    setStep(4);
+    window.location.reload(); 
   };
 
   return (
-    <div style={{ position: 'relative', height: '100dvh', overflow: 'hidden' }}>
+    <div style={{ 
+      width: '100%', 
+      height: '100dvh', 
+      position: 'relative', 
+      backgroundColor: '#05081c',
+      overflow: 'hidden'
+    }}>
       <button 
-        onClick={onExit} 
+        onClick={onExit}
         style={{ 
           position: 'absolute', 
           top: '20px', 
           left: '20px', 
           background: 'rgba(255,255,255,0.1)', 
-          border: '1px solid rgba(255,255,255,0.2)', 
+          border: 'none', 
           color: 'white', 
           borderRadius: '50%', 
           width: '40px', 
@@ -205,11 +189,8 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       
       {step === 8 && (
         <CheckpointStep 
-          roomData={roomData} 
-          userId={userId} 
-          updateRoom={updateRoom} 
-          forcedPowerUp={lastPU} 
-          onComplete={() => setStep(5)} 
+          powerUp={lastPU} 
+          onNext={() => setStep(5)} 
         />
       )}
       

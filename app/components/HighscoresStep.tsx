@@ -18,7 +18,8 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     // 1. משיכת נתוני ענן
     const scoresRef = ref(db, 'highscores');
-    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(150));
+    // אנחנו מושכים יותר רשומות כדי שנוכל לסנן כפילויות של gameId ולהישאר עם מספיק נתונים
+    const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(200));
 
     const unsubscribe = onValue(scoresQuery, (snapshot) => {
       const firebaseScores: ScoreEntry[] = [];
@@ -34,81 +35,118 @@ export default function HighscoresStep({ onClose }: { onClose: () => void }) {
       const localData = localStorage.getItem('trivia_solo_highscores');
       const localScores: ScoreEntry[] = localData ? JSON.parse(localData) : [];
 
-      // 3. מיזוג וסינון אגרסיבי
+      // 3. מיזוג וסינון כפילויות לפי gameId
+      // המטרה: אם יש כמה רשומות לאותו משחק, נשמור רק את הגבוהה ביותר
       const combined = [...firebaseScores, ...localScores];
       
-      const uniqueScores = combined.filter((v, i, a) => {
-        // סינון שמות גנריים כדי לנקות את הטבלה
-        const isGeneric = ["שחקן", "אורח", "guest", "player", "anonymous", ""].includes(v.name.toLowerCase().trim());
-        if (isGeneric) return false;
-
-        // הסרת כפילויות לפי gameId (עדיפות) או לפי שילוב של שם, ניקוד וזמן
-        return a.findIndex(t => 
-          (t.gameId && v.gameId && t.gameId === v.gameId) || 
-          (t.name === v.name && t.score === v.score && t.date === v.date)
-        ) === i;
+      const uniqueScoresMap = new Map<string, ScoreEntry>();
+      
+      combined.forEach(entry => {
+        // אם למשחק אין gameId (משחקים ישנים), נשתמש בשילוב של שם ותאריך כמפתח זמני
+        const key = entry.gameId || `${entry.name}-${entry.date}`;
+        const existing = uniqueScoresMap.get(key);
+        
+        if (!existing || entry.score > existing.score) {
+          uniqueScoresMap.set(key, entry);
+        }
       });
 
-      // 4. מיון סופי והצגת 20 המובילים
-      const sorted = uniqueScores
+      // 4. המרה חזרה למערך, מיון וחיתוך ל-20 המובילים
+      const finalScores = Array.from(uniqueScoresMap.values())
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);
-      
-      setScores(sorted);
+
+      setScores(finalScores);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const formatDate = (timestamp: number) => {
-    if (!timestamp) return "";
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' });
-  };
-
   return (
-    <div style={s.layout}>
-      <div style={s.container}>
-        <div style={s.header}>
-          <span style={s.icon}>🏆</span>
-          <h1 style={s.title}>היכל התהילה</h1>
-          <p style={s.subtitle}>20 התוצאות הגבוהות בעולם</p>
+    <div style={styles.overlay}>
+      <div style={styles.modal}>
+        <button onClick={onClose} style={styles.closeBtn}>✕</button>
+        
+        <div style={styles.header}>
+          <span style={styles.icon}>🏆</span>
+          <h2 style={styles.title}>אלופי הטריוויה</h2>
+          <p style={styles.subtitle}>20 התוצאות הגבוהות ביותר</p>
         </div>
 
-        <div style={s.listContainer}>
+        <div style={styles.listContainer}>
           {loading ? (
-            <p style={s.emptyState}>מעבד נתונים מהעולם...</p>
+            <div style={styles.emptyState}>טוען תוצאות...</div>
           ) : scores.length === 0 ? (
-            <p style={s.emptyState}>עדיין אין שיאים רשמיים... זה הזמן לקבוע אחד!</p>
+            <div style={styles.emptyState}>עדיין אין תוצאות. תהיו הראשונים!</div>
           ) : (
-            scores.map((entry, idx) => (
-              <div key={idx} style={{ 
-                ...s.scoreRow, 
-                backgroundColor: idx === 0 ? 'rgba(255, 145, 0, 0.15)' : 'rgba(255, 255, 255, 0.03)', 
-                borderColor: idx === 0 ? '#FF9100' : 'rgba(255, 255, 255, 0.1)',
-                transform: idx === 0 ? 'scale(1.02)' : 'scale(1)'
-              }}>
-                <div style={s.rank}>{idx + 1}</div>
-                <div style={s.details}>
-                  <div style={s.name}>{entry.name}</div>
-                  <div style={s.stats}>{formatDate(entry.date)} | {entry.difficulty}</div>
+            scores.map((s, idx) => (
+              <div 
+                key={s.gameId || idx} 
+                style={{
+                  ...styles.scoreRow,
+                  backgroundColor: idx === 0 ? 'rgba(255, 145, 0, 0.15)' : 'rgba(255,255,255,0.03)',
+                  borderColor: idx === 0 ? '#FF9100' : 'rgba(255,255,255,0.1)',
+                  transform: idx === 0 ? 'scale(1.02)' : 'scale(1)'
+                }}
+              >
+                <div style={styles.rank}>#{idx + 1}</div>
+                <div style={styles.details}>
+                  <div style={styles.name}>{s.name}</div>
+                  <div style={styles.stats}>
+                    {new Date(s.date).toLocaleDateString('he-IL')} | {s.difficulty}
+                  </div>
                 </div>
-                <div style={s.score}>{Math.round(entry.score).toLocaleString()} <span style={s.pts}>pts</span></div>
+                <div style={styles.scoreValue}>{s.score.toLocaleString()}</div>
               </div>
             ))
           )}
         </div>
 
-        <button onClick={onClose} style={s.closeBtn}>חזרה למשחק 🚀</button>
+        <button onClick={onClose} style={styles.actionBtn}>חזרה לתפריט</button>
       </div>
     </div>
   );
 }
 
-const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' },
-  container: { width: '100%', maxWidth: '450px', backgroundColor: '#1a1d2e', borderRadius: '30px', padding: '25px 15px', display: 'flex', flexDirection: 'column', maxHeight: '85vh', border: '1px solid rgba(255,145,0,0.2)', boxShadow: '0 10px 40px rgba(0,0,0,0.6)', boxSizing: 'border-box' },
+const styles: Record<string, React.CSSProperties> = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(5, 8, 28, 0.95)',
+    zIndex: 1000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '20px',
+    backdropFilter: 'blur(10px)'
+  },
+  modal: {
+    width: '100%',
+    maxWidth: '500px',
+    maxHeight: '85vh',
+    backgroundColor: '#0f172a',
+    borderRadius: '30px',
+    border: '2px solid rgba(255, 145, 0, 0.3)',
+    padding: '30px',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: '20px',
+    left: '20px',
+    background: 'none',
+    border: 'none',
+    color: '#94a3b8',
+    fontSize: '1.5rem',
+    cursor: 'pointer'
+  },
   header: { textAlign: 'center', marginBottom: '20px', flexShrink: 0 },
   icon: { fontSize: '3.5rem', display: 'block', marginBottom: '5px' },
   title: { color: '#FF9100', fontSize: '2.2rem', fontWeight: '900', margin: '0 0 5px 0' },
@@ -119,8 +157,18 @@ const s: any = {
   rank: { width: '35px', fontSize: '1.4rem', fontWeight: '900', color: '#FF9100' },
   details: { flex: 1, display: 'flex', flexDirection: 'column', paddingRight: '10px' },
   name: { fontSize: '1.1rem', fontWeight: 'bold', color: 'white', textAlign: 'right' },
-  stats: { fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' },
-  score: { fontSize: '1.4rem', fontWeight: '900', color: '#00E5FF', textAlign: 'left' },
-  pts: { fontSize: '0.75rem', color: '#64748b', marginRight: '2px' },
-  closeBtn: { width: '100%', height: '60px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 15px rgba(255,145,0,0.4)', transition: 'transform 0.2s' }
+  stats: { fontSize: '0.75rem', color: '#64748b', marginTop: '2px', textAlign: 'right' },
+  scoreValue: { fontSize: '1.6rem', fontWeight: '900', color: 'white' },
+  actionBtn: {
+    width: '100%',
+    padding: '16px',
+    borderRadius: '15px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #FF9100 0%, #FF6D00 100%)',
+    color: 'white',
+    fontSize: '1.1rem',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    boxShadow: '0 4px 15px rgba(255, 145, 0, 0.3)'
+  }
 };
