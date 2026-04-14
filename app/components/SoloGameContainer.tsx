@@ -78,7 +78,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     const newCorrectCount = isCorrect ? roomData.correctCount + 1 : roomData.correctCount;
     const isCheckpoint = (newCorrectCount > 0 && newCorrectCount % 5 === 0 && isCorrect);
     
-    // חישוב ניקוד עדכני (לפי הלוגיקה הקיימת של 10 נקודות לשאלה)
+    // חישוב ניקוד עדכני
     if (isCorrect) {
       saveLiveScore(newCorrectCount * 10);
     }
@@ -99,6 +99,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       setRoomData({
         ...roomData,
         ...update,
+        lastGrantedPowerUp: randomPU, // שורה שהתווספה כדי שהצ'ק פוינט יידע איזה כוח להציג
         powerUps: { ...roomData.powerUps, [userName]: [...currentPUs, randomPU] }
       });
       setStep(8); 
@@ -113,7 +114,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     if (newData.timeBanks && newData.timeBanks[userName] <= 0) {
       const score = roomData.correctCount * 10;
       setFinalScore(score);
-      saveLiveScore(score); // שמירה סופית במקרה של הפסד זמן
+      saveLiveScore(score); 
       setStep(9);
       return;
     }
@@ -189,8 +190,10 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       
       {step === 8 && (
         <CheckpointStep 
-          powerUp={lastPU} 
-          onNext={() => setStep(5)} 
+          roomData={roomData} 
+          userId={userId} 
+          updateRoom={updateRoom} 
+          onComplete={() => setStep(5)} 
         />
       )}
       
