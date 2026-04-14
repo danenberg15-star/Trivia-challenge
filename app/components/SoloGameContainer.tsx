@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { db } from "../../src/lib/firebase"; 
-import { ref, push } from "firebase/database"; 
+import { ref, push, set } from "firebase/database"; 
 import CountdownStep from "./CountdownStep";
 import GameStep from "./GameStep";
 import ScoreStep from "./ScoreStep";
@@ -19,6 +19,9 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   const [step, setStep] = useState(4);
   const [finalScore, setFinalScore] = useState(0); 
   const [lastPU, setLastPU] = useState<string>(""); 
+
+  // יצירת מזהה עקבי לסשן הנוכחי לצורך עדכון רציף
+  const [sessionId, setSessionId] = useState(() => `solo_${userId}_${Date.now()}`);
 
   const [roomData, setRoomData] = useState<any>({
     id: 'solo',
@@ -41,11 +44,37 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     if (updates.step !== undefined) setStep(updates.step);
   };
 
+  // פונקציית עזר המבצעת שמירה פסיבית בזמן אמת ללא השפעה על המשחק
+  const saveMidGameScore = (currentCorrectCount: number) => {
+    if (currentCorrectCount <= 0) return;
+
+    let score = currentCorrectCount * 10;
+    let difficultyLabel = "רמה משתנה";
+    if (roomData.difficulty === 'easy') { score = score / 4; difficultyLabel = "קל"; }
+    else if (roomData.difficulty === 'hard') { score = score * 2; difficultyLabel = "קשה"; }
+
+    const scoreData = {
+      name: userName,
+      score: Math.round(score),
+      date: Date.now(),
+      difficulty: difficultyLabel,
+      gameId: sessionId
+    };
+
+    // שימוש ב-set כדי לדרוס את הרשומה של אמצע המשחק במקום לייצר חדשות
+    set(ref(db, `highscores/${sessionId}`), scoreData);
+
+    // דריסה מקומית זהה
+    const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
+    const filteredLocal = localScores.filter((s: any) => s.gameId !== sessionId);
+    filteredLocal.push(scoreData);
+    localStorage.setItem('trivia_solo_highscores', JSON.stringify(filteredLocal.sort((a:any, b:any) => b.score - a.score).slice(0, 50)));
+  };
+
   const calculateAndSaveScore = (isVictory: boolean, questionsAsked: number, correctCount: number) => {
     let score = 0;
     
     if (isVictory) {
-      // נוסחת היעילות: (12 / שאלות) * 10,000 * אחוז דיוק
       const accuracy = correctCount / questionsAsked;
       score = (12 / questionsAsked) * 10000 * accuracy;
     } else {
@@ -63,23 +92,22 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
 
     const finalResult = Math.max(0, Math.round(score));
     const timestamp = Date.now();
-    const gameId = `solo_${userId}_${timestamp}`; 
 
     const scoreData = {
       name: userName,
       score: finalResult,
       date: timestamp,
       difficulty: difficultyLabel,
-      gameId: gameId
+      gameId: sessionId // שימוש באותו מזהה
     };
 
-    // שמירה לענן
-    push(ref(db, 'highscores'), scoreData);
+    // החלפתי את ה-push ב-set כדי להבטיח דריסה סופית ונקייה
+    set(ref(db, `highscores/${sessionId}`), scoreData);
 
-    // שמירה מקומית
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
-    localScores.push(scoreData);
-    localStorage.setItem('trivia_solo_highscores', JSON.stringify(localScores.slice(-50)));
+    const filteredLocal = localScores.filter((s: any) => s.gameId !== sessionId);
+    filteredLocal.push(scoreData);
+    localStorage.setItem('trivia_solo_highscores', JSON.stringify(filteredLocal.sort((a:any, b:any) => b.score - a.score).slice(0, 50)));
 
     return finalResult;
   };
@@ -92,6 +120,11 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     
     const questionText = typeof questionObj === 'string' ? questionObj : questionObj?.text;
     const updatedAsked = [...(roomData.askedQuestions || []), questionText];
+
+    // -- התוספת היחידה ללוגיקת התשובות: שמירה פסיבית אם צדקנו --
+    if (isCorrect) {
+      saveMidGameScore(newCorrectCount);
+    }
 
     const updatedData = { 
       ...roomData, 
@@ -131,6 +164,9 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   };
 
   const onRestart = () => {
+    // יצירת מזהה סשן חדש לגמרי למשחק החדש
+    setSessionId(`solo_${userId}_${Date.now()}`);
+    
     setRoomData((prev: any) => ({
       ...prev,
       askedQuestions: [],
