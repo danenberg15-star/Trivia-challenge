@@ -95,7 +95,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים חכמה - מגיבה מיידית למשתמש
+   * לוגיקת הבוטים - יציבה, אנושית ומתחלפת!
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -114,12 +114,11 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       
       if (latestRoom.step !== 5) return;
       
-      const shouldBeCorrect = (currentQ % 2 === 0);
-      const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
-      
       const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
-      const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-      const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
+      const myTeamIdx = latestRoom.players.find((p: any) => p.id === userId)?.teamIdx;
+      
+      // הבוטים הם כל קבוצה שאינה הקבוצה שלך
+      const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => idx !== myTeamIdx);
 
       if (botOnlyTeamIndices.length === 0) return;
 
@@ -127,7 +126,11 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       botOnlyTeamIndices.forEach((tIdx: number) => {
         const teamName = latestRoom.teamNames[tIdx];
-        const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
+        const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx);
+        
+        // הלוגיקה החדשה: קבוצה אחת תצדק וקבוצה אחת תטעה, וזה מתחלף כל שאלה!
+        const shouldBeCorrect = ((currentQ + tIdx) % 2 === 0);
+        const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
         
         teamBots.forEach((p: any) => { 
           botUpdates[`votes/${p.id}`] = botChoice; 
@@ -148,45 +151,44 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       ur(botUpdates);
     };
 
-    // אם המשתמש בחר תשובה או שנגמר הזמן, הבוטים מגיבים באותו שבריר שנייה!
-    if (isLocked || timeLeft <= 0) {
+    if (isLocked) {
+      // אם המשתמש נעל תשובה מהר - הבוטים מגיבים אליו מיד
       executeBots();
     } else {
-      // אם אתה מתעכב, הבוטים יפעלו אחרי 4 שניות בעצמם.
-      const timer = setTimeout(executeBots, 4000); 
+      // אם המשתמש מתעכב - הבוטים יענו עצמאית אחרי 5 שניות בלי קשר לשעון!
+      const timer = setTimeout(executeBots, 5000); 
       return () => clearTimeout(timer);
     }
-  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked, timeLeft]); 
+  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked]); 
 
-  // ============== מנגנון חילוץ חסין (מתעלם מבוטים!) ==============
+  // ============== מנגנון חילוץ חסין - מתעלם מבוטים! ==============
   useEffect(() => {
     if ((isLocked || timeLeft <= 0) && !isReadingDelay) {
       const rescueTimer = setTimeout(() => {
         const latestRoom = latestRoomRef.current;
         if (!latestRoom || latestRoom.step !== 5) return;
 
-        // חילוץ רק לשחקנים אנושיים - הבוטים מטופלים ולא יקבלו עונש!
-        const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-        const humanTeams = humanTeamIndices.map((idx: any) => latestRoom.teamNames[idx]);
+        const myTeamIdx = latestRoom.players.find((p: any) => p.id === userId)?.teamIdx;
+        if (myTeamIdx === undefined) return;
+        const localTeamName = latestRoom.teamNames[myTeamIdx];
 
         const results = latestRoom.roundResults || {};
         let emergencyUpdates: any = {};
         let neededRescue = false;
 
-        humanTeams.forEach((t: string) => {
-          if (!results[t] || results[t].answered !== true) {
-            neededRescue = true;
-            const currentBank = latestRoom.timeBanks?.[t] || 0;
-            const penaltyTime = Math.max(0, currentBank - 7);
+        // חילוץ ובדיקה אך ורק לקבוצה של השחקן האמיתי - אין סיכוי להעניש בוטים בטעות
+        if (localTeamName && (!results[localTeamName] || results[localTeamName].answered !== true)) {
+          neededRescue = true;
+          const currentBank = latestRoom.timeBanks?.[localTeamName] || 0;
+          const penaltyTime = Math.max(0, currentBank - 7);
 
-            emergencyUpdates[`timeBanks/${t}`] = penaltyTime;
-            emergencyUpdates[`roundResults/${t}`] = {
-              isCorrect: false,
-              finalTime: penaltyTime,
-              answered: true
-            };
-          }
-        });
+          emergencyUpdates[`timeBanks/${localTeamName}`] = penaltyTime;
+          emergencyUpdates[`roundResults/${localTeamName}`] = {
+            isCorrect: false,
+            finalTime: penaltyTime,
+            answered: true
+          };
+        }
 
         if (neededRescue) {
           actionsRef.current.updateRoom(emergencyUpdates);
@@ -195,7 +197,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       return () => clearTimeout(rescueTimer);
     }
-  }, [isLocked, timeLeft, isReadingDelay]);
+  }, [isLocked, timeLeft, isReadingDelay, userId]);
   // ====================================================================
 
   const votes = roomData.votes || {};
