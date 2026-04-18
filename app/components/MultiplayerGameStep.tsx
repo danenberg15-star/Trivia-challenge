@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import questionsData from "../../src/lib/questions.json";
 
 interface QuestionType {
@@ -19,7 +19,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   const [isReadingDelay, setIsReadingDelay] = useState(true);
-  
+  const [isLocked, setIsLocked] = useState(false); // סטייט מקומי לנעילת הקבוצה
+
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
   const isFrozen = isEffectActive && currentEffect.type === 'freeze' && Date.now() < currentEffect.expiresAt;
@@ -28,69 +29,119 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
 
+  // 1. אתחול שאלה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
     setIsReadingDelay(true); 
+    setIsLocked(false);
   }, [roomData.currentQuestionIdx, myTeamName]); 
 
+  // 2. השהיית קריאה
   useEffect(() => {
     if (!isReadingDelay) return;
     const delayTimer = setTimeout(() => setIsReadingDelay(false), 2000);
     return () => clearTimeout(delayTimer);
   }, [isReadingDelay, roomData.currentQuestionIdx]);
 
+  // 3. לוגיקת טיימר
   useEffect(() => {
-    if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay) return;
+    // הטיימר עוצר אם הקבוצה ננעלה, אם יש השהיית קריאה או הקפאה
+    if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay || isLocked) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
-  }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay]);
+  }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay, isLocked]);
 
+  // 4. לוגיקת בחירת שאלה (ליניארית חדשה)
+  const question = useMemo(() => {
+    const qIdx = roomData.currentQuestionIdx || 0;
+    let pool: QuestionType[] = [];
+
+    if (qIdx < 2) {
+      pool = ALL_QUESTIONS.filter(q => q.level === 1);
+    } else if (qIdx < 4) {
+      pool = ALL_QUESTIONS.filter(q => q.level === 2);
+    } else {
+      // איחוד רמות 3 ו-4 [cite: 1, 3]
+      pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
+    }
+
+    const askedTexts = roomData.askedQuestions || [];
+    let filteredPool = pool.filter(q => !askedTexts.includes(q.text));
+    if (filteredPool.length === 0) filteredPool = pool;
+
+    const seed = roomData.seed || 37;
+    // שימוש ב-seed ובאינדקס השאלה לערבוב עקבי בין כל השחקנים
+    const finalIdx = (seed + qIdx) % filteredPool.length;
+    return filteredPool[finalIdx];
+  }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
+
+  // 5. לוגיקת טיימר הקפאה
   useEffect(() => {
     let interval: any;
     if (isFrozen && currentEffect.expiresAt) {
       const calculateRemain = () => Math.max(0, Math.ceil((currentEffect.expiresAt - Date.now()) / 1000));
       setFreezeCountdown(calculateRemain());
-      interval = setInterval(() => {
-        setFreezeCountdown(calculateRemain());
-      }, 500); 
+      interval = setInterval(() => setFreezeCountdown(calculateRemain()), 500); 
     }
     return () => clearInterval(interval);
   }, [isFrozen, currentEffect.expiresAt]);
 
+  // 6. טיפול בבוטים (חדר עומר)
+  const roomDataRef = useRef(roomData);
+  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
+
   useEffect(() => {
-    if (timeLeft <= 0 && !hasFailed) {
-      setHasFailed(true);
-      if (onDirectStepChange) onDirectStepChange(9); 
-      else handleAnswer(false, 0, ""); 
+    const isOmerRoom = roomData.id === 'עומר' || roomData.id === 'qa_omer_room';
+    if (isOmerRoom && !isFrozen && !hasFailed && !isReadingDelay) {
+      const botTimer = setTimeout(() => {
+        const currentRoom = roomDataRef.current;
+        if (currentRoom.step !== 5) return;
+        
+        const botTeamIdx = 1; 
+        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        
+        if (botPlayers.length > 0) {
+          // שאלה אחת צודקים, שאלה אחת טועים לסירוגין 
+          const shouldBeCorrect = (currentRoom.currentQuestionIdx % 2 === 0);
+          const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
+          
+          let newVotes = { ...(currentRoom.votes || {}) };
+          botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
+          
+          updateRoom({ votes: newVotes });
+        }
+      }, 5000); // 5 שניות בדיוק 
+      return () => clearTimeout(botTimer);
     }
-  }, [timeLeft, hasFailed, onDirectStepChange, handleAnswer]);
+  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, isReadingDelay, question.correctIdx, question.options.length]);
 
-  const difficulty = roomData.difficulty || 'dynamic';
-  const timeBanksArray = Object.values(roomData.timeBanks || {}) as number[];
-  const maxTimeInGame = timeBanksArray.length > 0 ? Math.max(...timeBanksArray) : 15;
+  // 7. בדיקת קונצנזוס ונעילה אוטומטית
+  const votes = roomData.votes || {};
+  const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
+  const allVoted = myTeamVotes.every((v: any) => v !== undefined);
+  const firstVote = myTeamVotes[0];
+  const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
 
-  let targetLevel = 1;
-  if (difficulty === 'easy') targetLevel = maxTimeInGame <= 60 ? 1 : ((roomData.currentQuestionIdx % 2) + 1); 
-  else if (difficulty === 'hard') targetLevel = maxTimeInGame <= 60 ? 3 : 4;
-  else {
-    if (maxTimeInGame <= 40) targetLevel = 1;
-    else if (maxTimeInGame <= 80) targetLevel = 2;
-    else if (maxTimeInGame <= 105) targetLevel = 3;
-    else targetLevel = 4;
-  }
+  useEffect(() => {
+    if (allAgreed && !isLocked && !isReadingDelay) {
+      setIsLocked(true);
+      // שליחת התשובה לתשתית הנתונים (handleAnswer כבר לא מעביר שלב לבדו)
+      handleAnswer(firstVote === question.correctIdx, timeLeft, question);
+    }
+  }, [allAgreed, isLocked, isReadingDelay, firstVote, question, timeLeft, handleAnswer]);
 
-  const levelPool = ALL_QUESTIONS.filter((q: QuestionType) => q.level === targetLevel);
-  const askedTexts = roomData.askedQuestions || [];
-  let filteredPool = levelPool.filter(q => !askedTexts.includes(q.text));
-  if (filteredPool.length === 0) filteredPool = levelPool;
-
-  const seed = roomData.seed || 37;
-  const qIdx = (((roomData.currentQuestionIdx || 0) + 1) * seed) % filteredPool.length;
-  const question: QuestionType = filteredPool[qIdx];
+  // 8. טיפול בכישלון זמן
+  useEffect(() => {
+    if (timeLeft <= 0 && !hasFailed && !isLocked) {
+      setHasFailed(true);
+      handleAnswer(false, 0, question); 
+    }
+  }, [timeLeft, hasFailed, isLocked, handleAnswer, question]);
 
   const handlePowerUpClick = (pu: string) => {
+    if (isLocked) return;
     const safePowerUpsObj = roomData.powerUps || {};
     let myPowerUps = [...(safePowerUpsObj[myTeamName] || [])];
     const idx = myPowerUps.indexOf(pu);
@@ -112,56 +163,20 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   };
 
   const handleVote = (optIdx: number) => {
-    if (isFrozen || hasFailed) return; 
+    if (isFrozen || hasFailed || isLocked) return; 
     let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
+    // אם המשתמש בחדר עומר, הבוטים בצוות שלו (אם יש) מצביעים איתו
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
     updateRoom({ votes: newVotes });
   };
 
-  const roomDataRef = useRef(roomData);
-  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
-
-  useEffect(() => {
-    if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isFrozen && !hasFailed) {
-      const botTimer = setTimeout(() => {
-        const currentRoom = roomDataRef.current;
-        if (currentRoom.step !== 5) return;
-        
-        const botTeamIdx = 1; 
-        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
-        
-        if (botPlayers.length > 0) {
-          const isCorrect = currentRoom.currentQuestionIdx % 2 === 0;
-          const botChoice = isCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
-          
-          let newVotes = { ...(currentRoom.votes || {}) };
-          botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
-          
-          updateRoom({ votes: newVotes });
-        }
-      }, 7000); 
-      return () => clearTimeout(botTimer);
-    }
-  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, question.correctIdx]);
-
-  const votes = roomData.votes || {};
-  const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
-  const allVoted = myTeamVotes.every((v: any) => v !== undefined);
-  const firstVote = myTeamVotes[0];
-  const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
-
-  const handleSubmit = () => {
-    if (!allAgreed) return;
-    handleAnswer(firstVote === question.correctIdx, timeLeft, question);
-  };
-
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(Math.max(timeLeft / 120, 0), 1);
   const strokeDashoffset = circumference - (progress * circumference);
-  const clockColor = isFrozen ? "#00E5FF" : (isSlowMo ? "#FF9100" : "#ef4444");
+  const clockColor = isFrozen ? "#00E5FF" : (timeLeft < 5 ? "#ef4444" : "#FF9100");
 
   return (
     <div style={s.layout}>
@@ -186,18 +201,17 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps?.[myTeamName] || []).filter((p: string) => p === type).length;
             const isAvailable = count > 0;
-
             return (
               <button 
                 key={type} 
                 onClick={() => handlePowerUpClick(type)} 
-                disabled={!isAvailable} 
+                disabled={!isAvailable || isLocked} 
                 style={{ 
                   ...s.puBtn, 
                   opacity: isAvailable ? 1 : 0.2,
                   borderColor: isAvailable ? '#FF9100' : 'rgba(255,255,255,0.1)',
                   backgroundColor: isAvailable ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.05)',
-                  animation: isAvailable ? 'pu-pulse 2s infinite ease-in-out' : 'none',
+                  animation: (isAvailable && !isLocked) ? 'pu-pulse 2s infinite ease-in-out' : 'none',
                   borderWidth: isAvailable ? '2px' : '1px'
                 }}
               >
@@ -226,8 +240,17 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
               const isSelectedByMe = votes[userId] === i;
               if (hiddenOptions.includes(i)) return <div key={i} style={{ ...s.optionBtn, opacity: 0, pointerEvents: 'none' }} />;
+              
+              let borderColor = isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)';
+              let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'transparent';
+              
+              if (isLocked && isSelectedByMe) {
+                borderColor = '#10b981'; // צבע ירוק לציון נעילה מוצלחת
+                bgColor = 'rgba(16,185,129,0.1)';
+              }
+
               return (
-                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor: isSelectedByMe ? '#FF9100' : 'rgba(255,255,255,0.15)', backgroundColor: isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'transparent' }}>
+                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, cursor: isLocked ? 'default' : 'pointer' }}>
                   <span style={s.optionText}>{opt}</span>
                   <div style={s.votersContainer}>
                     {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} />)}
@@ -252,9 +275,11 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
             ))}
           </div>
         </div>
-        <button onClick={handleSubmit} disabled={!allAgreed || isFrozen} style={allAgreed ? s.submitBtn : s.submitBtnDisabled}>
-          {isFrozen ? "קפוא ❄️" : (allAgreed ? "ננעלנו - סופי!" : "מחכים להסכמה...")}
-        </button>
+        
+        {/* כפתור החיווי החדש במקום כפתור השליחה הידני */}
+        <div style={isLocked ? s.lockBadgeActive : s.lockBadgePending}>
+          {isLocked ? "ננעלנו! ממתינים לשאר הקבוצות... ⏳" : "מנסים להגיע להסכמה..."}
+        </div>
       </div>
     </div>
   );
@@ -322,13 +347,8 @@ const s: any = {
     color: 'white', 
     transition: 'all 0.3s ease' 
   },
-  puIcon: { 
-    fontSize: '1.4rem' 
-  },
-  puCount: { 
-    fontSize: '1.1rem', 
-    fontWeight: 'bold' 
-  },
+  puIcon: { fontSize: '1.4rem' },
+  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 
@@ -337,31 +357,19 @@ const s: any = {
     border: '1px solid rgba(0,229,255,0.1)', 
     boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
   },
-  questionText: { 
-    fontSize: '1.3rem', 
-    fontWeight: 'bold', 
-    color: '#FF9100', 
-    lineHeight: '1.4' 
-  },
-  optionsGrid: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '10px' 
-  },
+  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
   optionBtn: { 
     border: '2px solid', 
     borderRadius: '15px', 
     padding: '15px', 
-    cursor: 'pointer', 
     display: 'flex', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
-    transition: 'all 0.2s' 
+    transition: 'all 0.2s',
+    minHeight: '60px'
   },
-  optionText: { 
-    fontSize: '1.1rem', 
-    fontWeight: 'bold' 
-  },
+  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
   frozenBox: { 
     backgroundColor: 'rgba(0, 229, 255, 0.05)', 
     border: '2px dashed #00E5FF', 
@@ -374,16 +382,8 @@ const s: any = {
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  votersContainer: { 
-    display: 'flex', 
-    gap: '5px' 
-  },
-  voterDot: { 
-    width: '12px', 
-    height: '12px', 
-    borderRadius: '50%', 
-    border: '1px solid white' 
-  },
+  votersContainer: { display: 'flex', gap: '5px' },
+  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { 
     width: '100%', 
     maxWidth: '600px', 
@@ -398,17 +398,8 @@ const s: any = {
     padding: '10px', 
     border: '1px solid rgba(255,255,255,0.05)' 
   },
-  rosterLabel: { 
-    fontSize: '0.85rem', 
-    color: '#FF9100', 
-    fontWeight: 'bold', 
-    marginBottom: '8px' 
-  },
-  rosterGrid: { 
-    display: 'flex', 
-    flexWrap: 'wrap', 
-    gap: '10px' 
-  },
+  rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },
+  rosterGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px' },
   rosterItem: { 
     display: 'flex', 
     alignItems: 'center', 
@@ -418,37 +409,31 @@ const s: any = {
     borderRadius: '8px', 
     fontSize: '0.9rem' 
   },
-  rosterDot: { 
-    width: '10px', 
-    height: '10px', 
-    borderRadius: '50%' 
-  },
-  rosterName: { 
-    color: 'white' 
-  },
-  rosterStatus: { 
-    marginLeft: '5px' 
-  },
-  submitBtn: { 
+  rosterDot: { width: '10px', height: '10px', borderRadius: '50%' },
+  rosterName: { color: 'white' },
+  rosterStatus: { marginLeft: '5px' },
+  // סגנונות חדשים לחיווי הנעילה
+  lockBadgeActive: { 
     width: '100%', 
-    height: '65px', 
-    backgroundColor: '#FF9100', 
-    color: '#05081c', 
-    border: 'none', 
+    padding: '18px', 
+    backgroundColor: 'rgba(16,185,129,0.2)', 
+    color: '#10b981', 
+    border: '2px solid #10b981', 
     borderRadius: '15px', 
     fontWeight: '900', 
-    fontSize: '1.5rem', 
-    cursor: 'pointer', 
-    boxShadow: '0 4px 15px rgba(255,145,0,0.4)' 
+    fontSize: '1.2rem', 
+    textAlign: 'center',
+    boxShadow: '0 0 20px rgba(16,185,129,0.3)'
   },
-  submitBtnDisabled: { 
+  lockBadgePending: { 
     width: '100%', 
-    height: '65px', 
+    padding: '18px', 
     backgroundColor: '#1a1d2e', 
-    color: '#4b5563', 
+    color: '#94a3b8', 
     border: '1px solid rgba(255,255,255,0.05)', 
     borderRadius: '15px', 
-    fontWeight: '900', 
-    fontSize: '1.2rem' 
+    fontWeight: '700', 
+    fontSize: '1.1rem',
+    textAlign: 'center'
   }
 };
