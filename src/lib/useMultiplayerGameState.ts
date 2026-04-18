@@ -29,7 +29,7 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher: מנהל את המעברים בין השלבים ומעניק כוחות עזר
+   * Watcher 1: מעבר לשלב התוצאות והענקת כוחות
    */
   useEffect(() => {
     if (!roomData || roomData.step !== 5 || !roomId) return;
@@ -37,6 +37,7 @@ export function useMultiplayerGameState(roomId: string) {
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
+    // בדיקה אם כל הקבוצות רשומות כמי שסיימו לענות ב-Firebase
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished) {
@@ -52,7 +53,7 @@ export function useMultiplayerGameState(roomId: string) {
         isCheckpointNext: isCheckpoint
       };
 
-      // הענקת כוח עזר בכל שאלה חמישית
+      // הענקת כוח עזר אקראי לכל הקבוצות בחדר בצ'ק-פוינט
       if (isCheckpoint) {
         const powerUps = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
@@ -76,7 +77,7 @@ export function useMultiplayerGameState(roomId: string) {
         }
       });
 
-      // בדיקת תנאי הפסד (Game Over)
+      // בדיקת תנאי הפסד גלובלי
       const anyTimeLeft = allTeams.some((name: string) => roomData.timeBanks[name] > 0);
       if (!anyTimeLeft) {
         updatePayload.step = 9;
@@ -88,10 +89,12 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomData, roomId]);
 
   /**
-   * ניקוי נתוני סבב לקראת שאלה חדשה
+   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה (מניעת לופים)
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
+    
+    // ברגע שהמשחק עובר לשלב 4 (ספירה לאחור), מנקים את נתוני הסבב הקודם
     if (roomData.step === 4 && roomData.roundResults !== null) {
       update(ref(db, `rooms/${roomId}`), {
         roundResults: null,
@@ -117,6 +120,7 @@ export function useMultiplayerGameState(roomId: string) {
     const currentBankTime = roomData.timeBanks[teamName!] || 0;
     const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
     
+    // עדכון אטומי של נתיבי המידע של הקבוצה בלבד
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
