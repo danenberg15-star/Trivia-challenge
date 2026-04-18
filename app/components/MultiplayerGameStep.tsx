@@ -19,7 +19,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   const [isReadingDelay, setIsReadingDelay] = useState(true);
-  const [isLocked, setIsLocked] = useState(false); // סטייט מקומי לנעילת הקבוצה
+  const [isLocked, setIsLocked] = useState(false); 
 
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
@@ -29,7 +29,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
 
-  // 1. אתחול שאלה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
@@ -37,23 +36,20 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     setIsLocked(false);
   }, [roomData.currentQuestionIdx, myTeamName]); 
 
-  // 2. השהיית קריאה
   useEffect(() => {
     if (!isReadingDelay) return;
     const delayTimer = setTimeout(() => setIsReadingDelay(false), 2000);
     return () => clearTimeout(delayTimer);
   }, [isReadingDelay, roomData.currentQuestionIdx]);
 
-  // 3. לוגיקת טיימר
   useEffect(() => {
-    // הטיימר עוצר אם הקבוצה ננעלה, אם יש השהיית קריאה או הקפאה
     if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay || isLocked) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay, isLocked]);
 
-  // 4. לוגיקת בחירת שאלה (ליניארית חדשה)
+  // לוגיקת בחירת שאלה ליניארית (1 -> 2 -> 3+4)
   const question = useMemo(() => {
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
@@ -63,7 +59,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     } else if (qIdx < 4) {
       pool = ALL_QUESTIONS.filter(q => q.level === 2);
     } else {
-      // איחוד רמות 3 ו-4 [cite: 1, 3]
       pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
     }
 
@@ -72,12 +67,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     if (filteredPool.length === 0) filteredPool = pool;
 
     const seed = roomData.seed || 37;
-    // שימוש ב-seed ובאינדקס השאלה לערבוב עקבי בין כל השחקנים
     const finalIdx = (seed + qIdx) % filteredPool.length;
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
-  // 5. לוגיקת טיימר הקפאה
   useEffect(() => {
     let interval: any;
     if (isFrozen && currentEffect.expiresAt) {
@@ -88,10 +81,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return () => clearInterval(interval);
   }, [isFrozen, currentEffect.expiresAt]);
 
-  // 6. טיפול בבוטים (חדר עומר)
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
+  // לוגיקת בוטים משודרגת לחדר עומר - כולל נעילה אוטומטית עבורם
   useEffect(() => {
     const isOmerRoom = roomData.id === 'עומר' || roomData.id === 'qa_omer_room';
     if (isOmerRoom && !isFrozen && !hasFailed && !isReadingDelay) {
@@ -103,36 +96,36 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
         
         if (botPlayers.length > 0) {
-          // שאלה אחת צודקים, שאלה אחת טועים לסירוגין 
           const shouldBeCorrect = (currentRoom.currentQuestionIdx % 2 === 0);
           const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
           
           let newVotes = { ...(currentRoom.votes || {}) };
           botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
-          
           updateRoom({ votes: newVotes });
+
+          // תיקון: השחקן האנושי מעדכן את התוצאה עבור הבוטים כדי שהמשחק לא יתקע
+          const botTeamName = currentRoom.teamNames[botTeamIdx];
+          handleAnswer(shouldBeCorrect, 15, question, botTeamName);
         }
-      }, 5000); // 5 שניות בדיוק 
+      }, 5000); 
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, isReadingDelay, question.correctIdx, question.options.length]);
+  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, isReadingDelay, question, handleAnswer, updateRoom]);
 
-  // 7. בדיקת קונצנזוס ונעילה אוטומטית
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
   const allVoted = myTeamVotes.every((v: any) => v !== undefined);
   const firstVote = myTeamVotes[0];
   const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
 
+  // נעילה אוטומטית בקונצנזוס
   useEffect(() => {
     if (allAgreed && !isLocked && !isReadingDelay) {
       setIsLocked(true);
-      // שליחת התשובה לתשתית הנתונים (handleAnswer כבר לא מעביר שלב לבדו)
       handleAnswer(firstVote === question.correctIdx, timeLeft, question);
     }
   }, [allAgreed, isLocked, isReadingDelay, firstVote, question, timeLeft, handleAnswer]);
 
-  // 8. טיפול בכישלון זמן
   useEffect(() => {
     if (timeLeft <= 0 && !hasFailed && !isLocked) {
       setHasFailed(true);
@@ -165,7 +158,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed || isLocked) return; 
     let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
-    // אם המשתמש בחדר עומר, הבוטים בצוות שלו (אם יש) מצביעים איתו
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
@@ -245,7 +237,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
               let bgColor = isSelectedByMe ? 'rgba(255,145,0,0.1)' : 'transparent';
               
               if (isLocked && isSelectedByMe) {
-                borderColor = '#10b981'; // צבע ירוק לציון נעילה מוצלחת
+                borderColor = '#10b981';
                 bgColor = 'rgba(16,185,129,0.1)';
               }
 
@@ -276,7 +268,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           </div>
         </div>
         
-        {/* כפתור החיווי החדש במקום כפתור השליחה הידני */}
         <div style={isLocked ? s.lockBadgeActive : s.lockBadgePending}>
           {isLocked ? "ננעלנו! ממתינים לשאר הקבוצות... ⏳" : "מנסים להגיע להסכמה..."}
         </div>
@@ -357,8 +348,17 @@ const s: any = {
     border: '1px solid rgba(0,229,255,0.1)', 
     boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
   },
-  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
+  questionText: { 
+    fontSize: '1.3rem', 
+    fontWeight: 'bold', 
+    color: '#FF9100', 
+    lineHeight: '1.4' 
+  },
+  optionsGrid: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    gap: '10px' 
+  },
   optionBtn: { 
     border: '2px solid', 
     borderRadius: '15px', 
@@ -369,7 +369,10 @@ const s: any = {
     transition: 'all 0.2s',
     minHeight: '60px'
   },
-  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
+  optionText: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
   frozenBox: { 
     backgroundColor: 'rgba(0, 229, 255, 0.05)', 
     border: '2px dashed #00E5FF', 
@@ -382,8 +385,16 @@ const s: any = {
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  votersContainer: { display: 'flex', gap: '5px' },
-  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
+  votersContainer: { 
+    display: 'flex', 
+    gap: '5px' 
+  },
+  voterDot: { 
+    width: '12px', 
+    height: '12px', 
+    borderRadius: '50%', 
+    border: '1px solid white' 
+  },
   footer: { 
     width: '100%', 
     maxWidth: '600px', 
@@ -398,8 +409,17 @@ const s: any = {
     padding: '10px', 
     border: '1px solid rgba(255,255,255,0.05)' 
   },
-  rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },
-  rosterGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px' },
+  rosterLabel: { 
+    fontSize: '0.85rem', 
+    color: '#FF9100', 
+    fontWeight: 'bold', 
+    marginBottom: '8px' 
+  },
+  rosterGrid: { 
+    display: 'flex', 
+    flexWrap: 'wrap', 
+    gap: '10px' 
+  },
   rosterItem: { 
     display: 'flex', 
     alignItems: 'center', 
@@ -409,10 +429,17 @@ const s: any = {
     borderRadius: '8px', 
     fontSize: '0.9rem' 
   },
-  rosterDot: { width: '10px', height: '10px', borderRadius: '50%' },
-  rosterName: { color: 'white' },
-  rosterStatus: { marginLeft: '5px' },
-  // סגנונות חדשים לחיווי הנעילה
+  rosterDot: { 
+    width: '10px', 
+    height: '10px', 
+    borderRadius: '50%' 
+  },
+  rosterName: { 
+    color: 'white' 
+  },
+  rosterStatus: { 
+    marginLeft: '5px' 
+  },
   lockBadgeActive: { 
     width: '100%', 
     padding: '18px', 
