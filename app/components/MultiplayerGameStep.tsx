@@ -20,6 +20,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
   
+  // תוספת: סטייט להשהיית קריאה של 2 שניות בתחילת כל שאלה
+  const [isReadingDelay, setIsReadingDelay] = useState(true);
+  
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
   const isFrozen = isEffectActive && currentEffect.type === 'freeze' && Date.now() < currentEffect.expiresAt;
@@ -30,14 +33,25 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
+    setIsReadingDelay(true); // אתחול השהיית הקריאה בכל שאלה חדשה
   }, [roomData.currentQuestionIdx, myTeamName]); 
 
+  // לוגיקת השהיית הקריאה (2 שניות)
   useEffect(() => {
-    if (timeLeft <= 0 || isFrozen || hasFailed) return;
+    if (!isReadingDelay) return;
+    const delayTimer = setTimeout(() => {
+      setIsReadingDelay(false);
+    }, 2000);
+    return () => clearTimeout(delayTimer);
+  }, [isReadingDelay, roomData.currentQuestionIdx]);
+
+  useEffect(() => {
+    // השעון לא יורד אם יש השהיית קריאה, קפאון או כישלון
+    if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
-  }, [timeLeft, isFrozen, isSlowMo, hasFailed]);
+  }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay]);
 
   useEffect(() => {
     if (timeLeft <= 0 && !hasFailed) {

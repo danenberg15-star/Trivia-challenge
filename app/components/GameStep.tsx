@@ -23,6 +23,9 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const [hiddenOptions, setHiddenOptions] = useState<number[]>([]);
   const [isFrozen, setIsFrozen] = useState(false);
   const [isSlowMo, setIsSlowMo] = useState(false);
+  
+  // תוספת: סטייט להשהיית קריאה של 2 שניות
+  const [isReadingDelay, setIsReadingDelay] = useState(true);
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 20);
@@ -31,7 +34,18 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setHiddenOptions([]);
     setIsFrozen(false);
     setIsSlowMo(false);
+    // אתחול השהיית הקריאה בכל שאלה מחדש
+    setIsReadingDelay(true);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
+
+  // לוגיקת השהיית הקריאה (2 שניות)
+  useEffect(() => {
+    if (!isReadingDelay) return;
+    const delayTimer = setTimeout(() => {
+      setIsReadingDelay(false);
+    }, 2000);
+    return () => clearTimeout(delayTimer);
+  }, [isReadingDelay, roomData.currentQuestionIdx]);
 
   // לוגיקת בחירת שאלה ונעילתה (DDA) - לפי זמן הבסיס של השאלה
   const currentQuestion = useMemo(() => {
@@ -69,7 +83,8 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName, roomData.difficulty, roomData.seed, roomData.askedQuestions]);
 
   useEffect(() => {
-    if (isRevealing || isFrozen) return;
+    // השעון לא יורד אם יש השהיית קריאה, חשיפת תשובה או הקפאה
+    if (isRevealing || isFrozen || isReadingDelay) return;
 
     if (timeLeft <= 0) {
       setHasFailed(true);
@@ -91,7 +106,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     }, tickRate);
 
     return () => clearInterval(timer);
-  }, [timeLeft, isRevealing, isFrozen, isSlowMo, handleAnswer, currentQuestion]);
+  }, [timeLeft, isRevealing, isFrozen, isSlowMo, isReadingDelay, handleAnswer, currentQuestion]);
 
   const onOptionClick = (idx: number) => {
     if (isRevealing || isFrozen) return;
