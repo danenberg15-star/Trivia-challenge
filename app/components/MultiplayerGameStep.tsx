@@ -29,8 +29,13 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // שימוש ב-Ref כדי למנוע מהבוטים לענות פעמיים באותה שאלה או להתאפס
-  const botAnsweredForIdx = useRef<number>(-1);
+  // שימוש ב-Ref כדי לוודא שהבוט פועל רק פעם אחת בכל שאלה ולא מתאפס
+  const botHandledRef = useRef<number>(-1);
+  const roomDataRef = useRef(roomData);
+  
+  useEffect(() => {
+    roomDataRef.current = roomData;
+  }, [roomData]);
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
@@ -52,18 +57,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay, isLocked]);
 
-  // לוגיקת בחירת שאלה ליניארית (1-1 -> 2-2 -> 3/4)
   const question = useMemo(() => {
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
-
-    if (qIdx < 2) {
-      pool = ALL_QUESTIONS.filter(q => q.level === 1);
-    } else if (qIdx < 4) {
-      pool = ALL_QUESTIONS.filter(q => q.level === 2);
-    } else {
-      pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
-    }
+    if (qIdx < 2) pool = ALL_QUESTIONS.filter(q => q.level === 1);
+    else if (qIdx < 4) pool = ALL_QUESTIONS.filter(q => q.level === 2);
+    else pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
 
     const askedTexts = roomData.askedQuestions || [];
     let filteredPool = pool.filter(q => !askedTexts.includes(q.text));
@@ -74,50 +73,36 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
+  // לוגיקת בוטים (חדר עומר) - חסינה להתאפסויות
   useEffect(() => {
-    let interval: any;
-    if (isFrozen && currentEffect.expiresAt) {
-      const calculateRemain = () => Math.max(0, Math.ceil((currentEffect.expiresAt - Date.now()) / 1000));
-      setFreezeCountdown(calculateRemain());
-      interval = setInterval(() => setFreezeCountdown(calculateRemain()), 500); 
-    }
-    return () => clearInterval(interval);
-  }, [isFrozen, currentEffect.expiresAt]);
+    const currentQ = roomData.currentQuestionIdx || 0;
+    const roomName = (roomData.id || "").toString().trim();
+    const isQA = roomName === "עומר" || roomName === "qa_omer_room";
 
-  const roomDataRef = useRef(roomData);
-  useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
-
-  // לוגיקת בוטים משופרת - חדר עומר
-  useEffect(() => {
-    const isOmerRoom = roomData.id === 'עומר' || roomData.id === 'qa_omer_room';
-    const qIdx = roomData.currentQuestionIdx || 0;
-
-    if (isOmerRoom && !isReadingDelay && botAnsweredForIdx.current !== qIdx) {
-      // הטיימר מתחיל בדיוק כשהשהיית הקריאה מסתיימת (סך הכל 5 שניות מהופעת השאלה)
-      const botTimer = setTimeout(() => {
-        const currentRoom = roomDataRef.current;
-        if (currentRoom.step !== 5 || botAnsweredForIdx.current === qIdx) return;
+    if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
+      // טיימר הבוטים מתחיל ורץ עד הסוף בלי קשר לשינויי סטייט אחרים
+      const timer = setTimeout(() => {
+        const latestRoom = roomDataRef.current;
+        if (latestRoom.step !== 5 || botHandledRef.current === currentQ) return;
         
-        botAnsweredForIdx.current = qIdx; // סימון שהבוט ענה על השאלה הנוכחית
+        botHandledRef.current = currentQ;
         
         const botTeamIdx = 1; 
-        const botTeamName = currentRoom.teamNames[botTeamIdx];
-        const shouldBeCorrect = (qIdx % 2 === 0);
+        const botTeamName = latestRoom.teamNames[botTeamIdx];
+        const shouldBeCorrect = (currentQ % 2 === 0);
         const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
         
-        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
-        let newVotes = { ...(currentRoom.votes || {}) };
+        const botPlayers = latestRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        let newVotes = { ...(latestRoom.votes || {}) };
         botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
         
         updateRoom({ votes: newVotes });
-        
-        // שליחת התשובה עבור קבוצת הבוטים
         handleAnswer(shouldBeCorrect, 15, question, botTeamName);
-      }, 3000); // 3 שניות + 2 שניות השהיית קריאה = 5 שניות בדיוק
+      }, 3000); // 3 שניות + 2 שניות השהיית קריאה = 5 שניות
 
-      return () => clearTimeout(botTimer);
+      return () => clearTimeout(timer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isReadingDelay, question, handleAnswer, updateRoom]);
+  }, [roomData.currentQuestionIdx, isReadingDelay, question, roomData.id, handleAnswer, updateRoom]);
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -188,8 +173,30 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-          <circle cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" transform="rotate(-90 60 60)" style={{ transition: 'stroke-dashoffset 1s linear', filter: `drop-shadow(0 0 5px ${clockColor})` }} />
+          <circle 
+            cx="60" 
+            cy="60" 
+            r={radius} 
+            fill="none" 
+            stroke="rgba(255,255,255,0.05)" 
+            strokeWidth="8" 
+          />
+          <circle 
+            cx="60" 
+            cy="60" 
+            r={radius} 
+            fill="none" 
+            stroke={clockColor} 
+            strokeWidth="8" 
+            strokeDasharray={circumference} 
+            strokeDashoffset={strokeDashoffset} 
+            strokeLinecap="round" 
+            transform="rotate(-90 60 60)" 
+            style={{ 
+              transition: 'stroke-dashoffset 1s linear', 
+              filter: `drop-shadow(0 0 5px ${clockColor})` 
+            }} 
+          />
         </svg>
         <div style={s.clockTime}>{timeLeft}</div>
       </div>
@@ -222,7 +229,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           })}
         </div>
 
-        <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
+        <div style={s.questionCard}>
+          <h2 style={s.questionText}>{question.text}</h2>
+        </div>
 
         <div style={s.optionsGrid}>
           {isFrozen ? (
@@ -248,10 +257,28 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
               }
 
               return (
-                <div key={i} onClick={() => handleVote(i)} style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, cursor: isLocked ? 'default' : 'pointer' }}>
+                <div 
+                  key={i} 
+                  onClick={() => handleVote(i)} 
+                  style={{ 
+                    ...s.optionBtn, 
+                    borderColor, 
+                    backgroundColor: bgColor, 
+                    cursor: isLocked ? 'default' : 'pointer' 
+                  }}
+                >
                   <span style={s.optionText}>{opt}</span>
                   <div style={s.votersContainer}>
-                    {votersForThis.map((p: any) => <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} />)}
+                    {votersForThis.map((p: any) => (
+                      <div 
+                        key={p.id} 
+                        style={{ 
+                          ...s.voterDot, 
+                          backgroundColor: p.color, 
+                          boxShadow: `0 0 5px ${p.color}` 
+                        }} 
+                      />
+                    ))}
                   </div>
                 </div>
               );
