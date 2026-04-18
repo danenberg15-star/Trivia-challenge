@@ -8,6 +8,9 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 15);
 };
 
+// רשימת מספרים ראשוניים לערבוב ה-Seed (כמו במשחק המולטיפלייר)
+const coprimes = [7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97];
+
 // רשימת שמות חדרים מיוחדים שמפעילים בוטים
 const BOT_ROOMS = ['עומר', 'qa_omer_room', 'עומר Q', 'עומר q'];
 
@@ -27,33 +30,34 @@ export function useGameState() {
   const handleCreateRoom = async (creatorName: string) => {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const roomRef = ref(db, `rooms/${newRoomId}`);
+    const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
     
     await set(roomRef, {
       id: newRoomId,
-      step: 3, 
+      step: 3,
       players: [{ id: userId, name: creatorName, teamIdx: 0 }],
       teamNames: ['קבוצה 1', 'קבוצה 2'],
       timeBanks: { 'קבוצה 1': 15, 'קבוצה 2': 15 },
       powerUps: { 'קבוצה 1': [], 'קבוצה 2': [] },
-      readyTeams: {},
       gameMode: 'group',
-      seed: 37,
+      seed: seed,
       currentQuestionIdx: 0,
       askedQuestions: []
     });
     return newRoomId;
   };
 
-  // הצטרפות לחדר קיים
-  const handleJoinRoom = async (code: string, playerName: string) => {
-    if (!code || !playerName) return false;
-    
-    const upperCode = code.toUpperCase();
-    const originalCode = code.trim();
+  // הצטרפות לחדר קיים או חדר QA
+  const handleJoinRoom = async (roomCode: string, playerName: string) => {
+    const upperCode = roomCode.toUpperCase().trim();
+    const originalCode = roomCode.trim();
 
-    // בדיקה אם זה חדר בוטים (עכשיו תומך גם בעומר Q)
+    // בדיקה אם זה חדר בוטים (QA)
     if (BOT_ROOMS.includes(originalCode) || BOT_ROOMS.includes(upperCode)) {
        const roomRef = ref(db, `rooms/${upperCode}`);
+       // יצירת Seed אקראי גם בחדר ה-QA כדי לגוון בשאלות בכל כניסה
+       const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+       
        await set(roomRef, {
          id: upperCode,
          step: 3,
@@ -66,14 +70,13 @@ export function useGameState() {
          timeBanks: { 'הקבוצה שלי': 15, 'הבוטים': 15 },
          powerUps: { 'הקבוצה שלי': [], 'הבוטים': [] },
          gameMode: 'group',
-         seed: 42,
+         seed: seed,
          currentQuestionIdx: 0,
          askedQuestions: []
        });
        return true;
     }
 
-    // הצטרפות לחדר חברים רגיל
     const roomRef = ref(db, `rooms/${upperCode}`);
     const snapshot = await get(roomRef);
     
@@ -81,17 +84,22 @@ export function useGameState() {
       const data = snapshot.val();
       const players = data.players || [];
       
-      // אם השחקן לא קיים בחדר, נוסיף אותו
-      if (!players.find((p: any) => p.id === userId)) {
-        players.push({ id: userId, name: playerName, teamIdx: players.length % 2 });
-        await set(ref(db, `rooms/${upperCode}/players`), players);
+      const isAlreadyIn = players.find((p: any) => p.id === userId);
+      if (!isAlreadyIn) {
+        const team0Count = players.filter((p: any) => p.teamIdx === 0).length;
+        const team1Count = players.filter((p: any) => p.teamIdx === 1).length;
+        const teamIdx = team0Count <= team1Count ? 0 : 1;
+        
+        const updatedPlayers = [...players, { id: userId, name: playerName, teamIdx }];
+        await update(roomRef, { players: updatedPlayers });
       }
       return true;
     }
-    
-    alert('החדר לא נמצא. אנא בדוק את הקוד ונסה שוב.');
     return false;
   };
 
   return { mounted, userId, setUserName, handleCreateRoom, handleJoinRoom };
 }
+
+// פונקציית עזר לייבוא - הוספת פקודת ה-update שחסרה ב-imports בגרסה הקודמת
+import { update } from 'firebase/database';
