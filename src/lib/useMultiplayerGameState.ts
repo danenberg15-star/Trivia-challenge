@@ -29,8 +29,7 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher 1: מעבר לשלב התוצאות (שלב 6)
-   * מופעל רק כשכולם ענו בשלב 5.
+   * Watcher: מנהל את המעברים בין השלבים ומעניק כוחות עזר
    */
   useEffect(() => {
     if (!roomData || roomData.step !== 5 || !roomId) return;
@@ -38,10 +37,14 @@ export function useMultiplayerGameState(roomId: string) {
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
+    // בדיקה אם כל הקבוצות רשומות כמי שסיימו לענות בסבב הזה
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished) {
-      const nextIdx = (roomData.currentQuestionIdx || 0) + 1;
+      const currentIdx = roomData.currentQuestionIdx || 0;
+      const nextIdx = currentIdx + 1;
+      
+      // בדיקה אם השאלה הבאה היא צ'ק-פוינט (כל 5 שאלות)
       const isCheckpoint = nextIdx > 0 && nextIdx % 5 === 0;
       
       const updatePayload: any = {
@@ -52,6 +55,24 @@ export function useMultiplayerGameState(roomId: string) {
         isCheckpointNext: isCheckpoint
       };
 
+      // לוגיקת הענקת כוחות עזר בצ'ק-פוינט
+      if (isCheckpoint) {
+        const powerUps = ['50:50', 'freeze', 'slow-mo'];
+        const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
+        const currentPowerUpsObj = roomData.powerUps || {};
+        const updatedPowerUps: any = {};
+
+        // הענקת הכוח לכל הקבוצות בחדר
+        allTeams.forEach((name: string) => {
+          const teamPUs = currentPowerUpsObj[name] || [];
+          updatedPowerUps[name] = [...teamPUs, randomPU];
+        });
+
+        updatePayload.powerUps = updatedPowerUps;
+        updatePayload.lastGrantedPowerUp = randomPU; // לצורך הצגה במסך הצ'ק-פוינט
+      }
+
+      // בדיקת תנאי ניצחון/הפסד
       allTeams.forEach((name: string) => {
         if (roomData.timeBanks[name] >= 120) {
           updatePayload.step = 7;
@@ -70,14 +91,10 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomData, roomId]);
 
   /**
-   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה
-   * ברגע שהמשחק עובר לשלב 4 (ספירה לאחור), אנחנו מנקים את תוצאות הסבב הקודם.
-   * זה מונע את ה"לופ" שבו המשחק חושב שכולם כבר ענו על השאלה החדשה.
+   * ניקוי נתוני סבב לקראת שאלה חדשה
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
-    
-    // אם עברנו לשלב 4 (הכנה לשאלה) ויש עדיין תוצאות ישנות ב-DB
     if (roomData.step === 4 && roomData.roundResults !== null) {
       update(ref(db, `rooms/${roomId}`), {
         roundResults: null,
@@ -126,7 +143,9 @@ export function useMultiplayerGameState(roomId: string) {
       timeBanks: roomData.teamNames.reduce((acc: any, name: string) => ({...acc, [name]: 15}), {}), 
       askedQuestions: [], 
       readyTeams: {},
-      isCheckpointNext: false
+      isCheckpointNext: false,
+      powerUps: roomData.teamNames.reduce((acc: any, name: string) => ({...acc, [name]: []}), {}),
+      teamEffects: {}
     });
   };
 
