@@ -95,76 +95,85 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת הבוטים - מעודכנת לעדכון אטומי
+   * לוגיקת בוטים חכמה - מגיבה מיידית למשתמש
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
     const roomName = (roomData.id || "").toString().trim();
     const isQA = ["עומר", "qa_omer_room", "עומר Q", "עומר q"].includes(roomName);
 
-    if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
-      const timer = setTimeout(() => {
-        if (botHandledRef.current === currentQ) return;
-        botHandledRef.current = currentQ;
-        
-        const latestRoom = latestRoomRef.current;
-        const latestQ = latestQuestionRef.current;
-        const { updateRoom: ur } = actionsRef.current;
-        
-        if (latestRoom.step !== 5) return;
-        
-        const shouldBeCorrect = (currentQ % 2 === 0);
-        const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
-        
-        const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
-        const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-        const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
+    if (!isQA || isReadingDelay || botHandledRef.current === currentQ) return;
 
-        if (botOnlyTeamIndices.length === 0) return;
+    const executeBots = () => {
+      if (botHandledRef.current === currentQ) return;
+      botHandledRef.current = currentQ;
+      
+      const latestRoom = latestRoomRef.current;
+      const latestQ = latestQuestionRef.current;
+      const { updateRoom: ur } = actionsRef.current;
+      
+      if (latestRoom.step !== 5) return;
+      
+      const shouldBeCorrect = (currentQ % 2 === 0);
+      const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
+      
+      const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
+      const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
+      const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
-        let botUpdates: any = {};
+      if (botOnlyTeamIndices.length === 0) return;
 
-        botOnlyTeamIndices.forEach((tIdx: number) => {
-          const teamName = latestRoom.teamNames[tIdx];
-          const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
-          
-          teamBots.forEach((p: any) => { 
-            botUpdates[`votes/${p.id}`] = botChoice; 
-          });
-          
-          const currentBankTime = latestRoom.timeBanks?.[teamName] || 0;
-          const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
-          
-          botUpdates[`timeBanks/${teamName}`] = newTime;
-          botUpdates[`roundResults/${teamName}`] = {
-            isCorrect: shouldBeCorrect,
-            finalTime: newTime,
-            answered: true
-          };
+      let botUpdates: any = {};
+
+      botOnlyTeamIndices.forEach((tIdx: number) => {
+        const teamName = latestRoom.teamNames[tIdx];
+        const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
+        
+        teamBots.forEach((p: any) => { 
+          botUpdates[`votes/${p.id}`] = botChoice; 
         });
         
-        botUpdates[`lastQuestion`] = latestQ;
+        const currentBankTime = latestRoom.timeBanks?.[teamName] || 0;
+        const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
         
-        ur(botUpdates);
-      }, 3000); 
+        botUpdates[`timeBanks/${teamName}`] = newTime;
+        botUpdates[`roundResults/${teamName}`] = {
+          isCorrect: shouldBeCorrect,
+          finalTime: newTime,
+          answered: true
+        };
+      });
+      
+      botUpdates[`lastQuestion`] = latestQ;
+      ur(botUpdates);
+    };
 
+    // אם המשתמש בחר תשובה או שנגמר הזמן, הבוטים מגיבים באותו שבריר שנייה!
+    if (isLocked || timeLeft <= 0) {
+      executeBots();
+    } else {
+      // אם אתה מתעכב, הבוטים יפעלו אחרי 4 שניות בעצמם.
+      const timer = setTimeout(executeBots, 4000); 
       return () => clearTimeout(timer);
     }
-  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id]); 
+  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked, timeLeft]); 
 
-  // ============== מנגנון חילוץ חסין לחלוטין (Failsafe) ==============
+  // ============== מנגנון חילוץ חסין (מתעלם מבוטים!) ==============
   useEffect(() => {
     if ((isLocked || timeLeft <= 0) && !isReadingDelay) {
       const rescueTimer = setTimeout(() => {
         const latestRoom = latestRoomRef.current;
         if (!latestRoom || latestRoom.step !== 5) return;
 
-        const teams = latestRoom.teamNames || [];
+        // חילוץ רק לשחקנים אנושיים - הבוטים מטופלים ולא יקבלו עונש!
+        const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
+        const humanTeams = humanTeamIndices.map((idx: any) => latestRoom.teamNames[idx]);
+
         const results = latestRoom.roundResults || {};
         let emergencyUpdates: any = {};
         let neededRescue = false;
 
-        teams.forEach((t: string) => {
+        humanTeams.forEach((t: string) => {
           if (!results[t] || results[t].answered !== true) {
             neededRescue = true;
             const currentBank = latestRoom.timeBanks?.[t] || 0;
@@ -182,7 +191,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         if (neededRescue) {
           actionsRef.current.updateRoom(emergencyUpdates);
         }
-      }, 4000); // 4 שניות אחרי הנעילה/זמן אפס, מוודא שאף אחד לא נתקע
+      }, 4000); 
 
       return () => clearTimeout(rescueTimer);
     }
