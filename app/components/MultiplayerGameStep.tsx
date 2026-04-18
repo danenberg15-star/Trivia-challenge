@@ -29,13 +29,16 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // Refs לניהול יציב של בוטים ללא איפוס הטיימר
+  // Refs שהופכים את הבוטים ל"בלתי פגיעים" לרענוני מסך או לחיצות
   const botHandledRef = useRef<number>(-1);
   const latestRoomRef = useRef(roomData);
+  const actionsRef = useRef({ handleAnswer, updateRoom });
   
+  // שומרים תמיד על גרסה עדכנית של הפונקציות והנתונים בלי לגרום לטיימר להתאפס
   useEffect(() => {
     latestRoomRef.current = roomData;
-  }, [roomData]);
+    actionsRef.current = { handleAnswer, updateRoom };
+  }, [roomData, handleAnswer, updateRoom]);
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
@@ -94,9 +97,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת הבוטים (חדר עומר) - גרסה חסינה לחלוטין!
-   * התלויות של ה-useEffect צומצמו למינימום. הטיימר לא יתאפס כשהשעון יורד
-   * או כשאתה לוחץ על תשובה.
+   * לוגיקת בוטים חסינה לחלוטין.
+   * תלויה אך ורק במספר השאלה, כך שלעולם לא תתאפס כשאתה בוחר תשובה או כשהשעון יורד!
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -105,12 +107,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
     if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
       const timer = setTimeout(() => {
-        // מניעת הפעלה כפולה באותה שאלה
         if (botHandledRef.current === currentQ) return;
         botHandledRef.current = currentQ;
         
         const latestRoom = latestRoomRef.current;
         const latestQ = latestQuestionRef.current;
+        const { handleAnswer: ha, updateRoom: ur } = actionsRef.current;
         
         if (latestRoom.step !== 5) return;
         
@@ -119,27 +121,24 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         
         const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
         const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-        // מאתר את כל הקבוצות שאין בהן שחקנים אנושיים
         const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
         let newVotes = { ...(latestRoom.votes || {}) };
 
-        // מעבר על כל קבוצות הבוטים ושליחת התשובות
         botOnlyTeamIndices.forEach((tIdx: number) => {
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
           teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
-          
-          handleAnswer(shouldBeCorrect, 15, latestQ, teamName);
+          ha(shouldBeCorrect, 15, latestQ, teamName);
         });
         
-        updateRoom({ votes: newVotes });
+        ur({ votes: newVotes });
       }, 3000); 
 
       return () => clearTimeout(timer);
     }
-  // תלויות מינימליות - ימנעו מהטיימר להתאפס!
+  // השורה הבאה היא הקסם - מונעת מהטיימר להתאפס כי אין כאן את משתנה הזמן או ההצבעה!
   }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id]); 
 
   const votes = roomData.votes || {};
