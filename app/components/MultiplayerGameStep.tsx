@@ -26,7 +26,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // תוספת: סטייט למדידת טיימר ההקפאה החי (במשחק הקבוצתי)
   const [freezeCountdown, setFreezeCountdown] = useState(0);
 
   useEffect(() => {
@@ -48,7 +47,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay]);
 
-  // לוגיקת טיימר ההקפאה הענק
   useEffect(() => {
     let interval: any;
     if (isFrozen && currentEffect.expiresAt) {
@@ -56,7 +54,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       setFreezeCountdown(calculateRemain());
       interval = setInterval(() => {
         setFreezeCountdown(calculateRemain());
-      }, 500); // מתעדכן פעמיים בשנייה כדי להישאר מסונכרן בדיוק
+      }, 500); 
     }
     return () => clearInterval(interval);
   }, [isFrozen, currentEffect.expiresAt]);
@@ -167,6 +165,14 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   return (
     <div style={s.layout}>
+      <style>{`
+        @keyframes pu-pulse {
+          0% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 145, 0, 0.4); }
+          50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(255, 145, 0, 0.7); }
+          100% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 145, 0, 0.4); }
+        }
+      `}</style>
+
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
@@ -179,17 +185,26 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps?.[myTeamName] || []).filter((p: string) => p === type).length;
+            const isAvailable = count > 0;
+
             return (
               <button 
                 key={type} 
                 onClick={() => handlePowerUpClick(type)} 
-                disabled={count === 0} 
-                style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}
+                disabled={!isAvailable} 
+                style={{ 
+                  ...s.puBtn, 
+                  opacity: isAvailable ? 1 : 0.2,
+                  borderColor: isAvailable ? '#FF9100' : 'rgba(255,255,255,0.1)',
+                  backgroundColor: isAvailable ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.05)',
+                  animation: isAvailable ? 'pu-pulse 2s infinite ease-in-out' : 'none',
+                  borderWidth: isAvailable ? '2px' : '1px'
+                }}
               >
-                <span style={s.puIcon}>
+                <span style={{ ...s.puIcon, fontSize: isAvailable ? '1.6rem' : '1.4rem' }}>
                   {type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}
                 </span>
-                <span style={s.puCount}>x{count}</span>
+                <span style={{ ...s.puCount, color: isAvailable ? '#FF9100' : 'white' }}>x{count}</span>
               </button>
             );
           })}
@@ -246,30 +261,194 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 }
 
 const s: any = {
-  layout: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: '#05081c', color: 'white', padding: '15px', direction: 'rtl', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' },
-  clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '5px' },
-  clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
-  contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  powerUpsRow: { display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px', marginBottom: '10px', flexShrink: 0 },
-  puBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: '12px 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', color: 'white', transition: 'all 0.2s ease' },
-  puIcon: { fontSize: '1.4rem' },
-  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
-  questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
-  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' },
-  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' },
-  votersContainer: { display: 'flex', gap: '5px' },
-  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
-  footer: { width: '100%', maxWidth: '600px', padding: '5px 0 10px 0', display: 'flex', flexDirection: 'column', gap: '10px' },
-  rosterContainer: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '10px', border: '1px solid rgba(255,255,255,0.05)' },
-  rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },
-  rosterGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px' },
-  rosterItem: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px', fontSize: '0.9rem' },
-  rosterDot: { width: '10px', height: '10px', borderRadius: '50%' },
-  rosterName: { color: 'white' },
-  rosterStatus: { marginLeft: '5px' },
-  submitBtn: { width: '100%', height: '65px', backgroundColor: '#FF9100', color: '#05081c', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,145,0,0.4)' },
-  submitBtnDisabled: { width: '100%', height: '65px', backgroundColor: '#1a1d2e', color: '#4b5563', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '15px', fontWeight: '900', fontSize: '1.2rem' }
+  layout: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    height: '100dvh', 
+    backgroundColor: '#05081c', 
+    color: 'white', 
+    padding: '15px', 
+    direction: 'rtl', 
+    alignItems: 'center', 
+    boxSizing: 'border-box', 
+    overflow: 'hidden' 
+  },
+  clockContainer: { 
+    position: 'relative', 
+    width: '120px', 
+    height: '120px', 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    flexShrink: 0, 
+    marginTop: '5px' 
+  },
+  clockTime: { 
+    position: 'absolute', 
+    fontSize: '2.8rem', 
+    fontWeight: '900', 
+    color: 'white', 
+    fontFamily: 'monospace' 
+  },
+  contentArea: { 
+    flex: 1, 
+    display: 'flex', 
+    flexDirection: 'column', 
+    width: '100%', 
+    maxWidth: '600px', 
+    overflowY: 'auto', 
+    gap: '15px', 
+    padding: '10px 5px', 
+    boxSizing: 'border-box' 
+  },
+  powerUpsRow: { 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    width: '100%', 
+    gap: '12px', 
+    marginBottom: '10px', 
+    flexShrink: 0 
+  },
+  puBtn: { 
+    flex: 1, 
+    border: '1px solid', 
+    borderRadius: '15px', 
+    padding: '12px 5px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: '8px', 
+    cursor: 'pointer', 
+    color: 'white', 
+    transition: 'all 0.3s ease' 
+  },
+  puIcon: { 
+    fontSize: '1.4rem' 
+  },
+  puCount: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
+  questionCard: { 
+    backgroundColor: 'rgba(255,255,255,0.02)', 
+    borderRadius: '20px', 
+    padding: '20px', 
+    textAlign: 'center', 
+    border: '1px solid rgba(0,229,255,0.1)', 
+    boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
+  },
+  questionText: { 
+    fontSize: '1.3rem', 
+    fontWeight: 'bold', 
+    color: '#FF9100', 
+    lineHeight: '1.4' 
+  },
+  optionsGrid: { 
+    display: 'flex', 
+    flexDirection: 'column', 
+    gap: '10px' 
+  },
+  optionBtn: { 
+    border: '2px solid', 
+    borderRadius: '15px', 
+    padding: '15px', 
+    cursor: 'pointer', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    transition: 'all 0.2s' 
+  },
+  optionText: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
+  frozenBox: { 
+    backgroundColor: 'rgba(0, 229, 255, 0.05)', 
+    border: '2px dashed #00E5FF', 
+    borderRadius: '15px', 
+    padding: '25px', 
+    color: '#00E5FF', 
+    textAlign: 'center', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  votersContainer: { 
+    display: 'flex', 
+    gap: '5px' 
+  },
+  voterDot: { 
+    width: '12px', 
+    height: '12px', 
+    borderRadius: '50%', 
+    border: '1px solid white' 
+  },
+  footer: { 
+    width: '100%', 
+    maxWidth: '600px', 
+    padding: '5px 0 10px 0', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    gap: '10px' 
+  },
+  rosterContainer: { 
+    backgroundColor: 'rgba(255,255,255,0.03)', 
+    borderRadius: '12px', 
+    padding: '10px', 
+    border: '1px solid rgba(255,255,255,0.05)' 
+  },
+  rosterLabel: { 
+    fontSize: '0.85rem', 
+    color: '#FF9100', 
+    fontWeight: 'bold', 
+    marginBottom: '8px' 
+  },
+  rosterGrid: { 
+    display: 'flex', 
+    flexWrap: 'wrap', 
+    gap: '10px' 
+  },
+  rosterItem: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '5px', 
+    backgroundColor: 'rgba(0,0,0,0.3)', 
+    padding: '5px 10px', 
+    borderRadius: '8px', 
+    fontSize: '0.9rem' 
+  },
+  rosterDot: { 
+    width: '10px', 
+    height: '10px', 
+    borderRadius: '50%' 
+  },
+  rosterName: { 
+    color: 'white' 
+  },
+  rosterStatus: { 
+    marginLeft: '5px' 
+  },
+  submitBtn: { 
+    width: '100%', 
+    height: '65px', 
+    backgroundColor: '#FF9100', 
+    color: '#05081c', 
+    border: 'none', 
+    borderRadius: '15px', 
+    fontWeight: '900', 
+    fontSize: '1.5rem', 
+    cursor: 'pointer', 
+    boxShadow: '0 4px 15px rgba(255,145,0,0.4)' 
+  },
+  submitBtnDisabled: { 
+    width: '100%', 
+    height: '65px', 
+    backgroundColor: '#1a1d2e', 
+    color: '#4b5563', 
+    border: '1px solid rgba(255,255,255,0.05)', 
+    borderRadius: '15px', 
+    fontWeight: '900', 
+    fontSize: '1.2rem' 
+  }
 };

@@ -24,10 +24,7 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
   const [isFrozen, setIsFrozen] = useState(false);
   const [isSlowMo, setIsSlowMo] = useState(false);
   
-  // השהיית קריאה של 2 שניות
   const [isReadingDelay, setIsReadingDelay] = useState(true);
-  
-  // סטייט למדידת טיימר ההקפאה (10 עד 0)
   const [freezeTimer, setFreezeTimer] = useState(0);
 
   useEffect(() => {
@@ -40,7 +37,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     setIsReadingDelay(true);
   }, [roomData.currentQuestionIdx, roomData.timeBanks, myTeamName]);
 
-  // לוגיקת השהיית הקריאה
   useEffect(() => {
     if (!isReadingDelay) return;
     const delayTimer = setTimeout(() => {
@@ -49,7 +45,6 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
     return () => clearTimeout(delayTimer);
   }, [isReadingDelay, roomData.currentQuestionIdx]);
 
-  // לוגיקת טיימר ההקפאה הענק
   useEffect(() => {
     let t: any;
     if (isFrozen) {
@@ -165,6 +160,15 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
 
   return (
     <div style={s.layout}>
+      {/* הזרקת CSS לאנימציית הפעימה של הכוחות */}
+      <style>{`
+        @keyframes pu-pulse {
+          0% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 145, 0, 0.4); }
+          50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(255, 145, 0, 0.7); }
+          100% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 145, 0, 0.4); }
+        }
+      `}</style>
+
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
@@ -178,15 +182,26 @@ export default function GameStep({ roomData, userId, updateRoom, handleAnswer, o
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps[myTeamName] || []).filter((p: string) => p === type).length;
+            const isAvailable = count > 0;
+            
             return (
               <button 
                 key={type} 
                 onClick={() => usePowerUp(type)} 
-                disabled={count === 0 || isRevealing} 
-                style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}
+                disabled={!isAvailable || isRevealing} 
+                style={{ 
+                  ...s.puBtn, 
+                  opacity: isAvailable ? 1 : 0.2,
+                  borderColor: isAvailable ? '#FF9100' : 'rgba(255,255,255,0.1)',
+                  backgroundColor: isAvailable ? 'rgba(255,145,0,0.1)' : 'rgba(255,255,255,0.05)',
+                  animation: isAvailable ? 'pu-pulse 2s infinite ease-in-out' : 'none',
+                  borderWidth: isAvailable ? '2px' : '1px'
+                }}
               >
-                <span style={s.puIcon}>{type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}</span>
-                <span style={s.puCount}>x{count}</span>
+                <span style={{ ...s.puIcon, fontSize: isAvailable ? '1.6rem' : '1.4rem' }}>
+                  {type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}
+                </span>
+                <span style={{ ...s.puCount, color: isAvailable ? '#FF9100' : 'white' }}>x{count}</span>
               </button>
             );
           })}
@@ -282,14 +297,13 @@ const s: any = {
     display: 'flex', 
     justifyContent: 'space-between', 
     width: '100%',
-    gap: '10px', 
+    gap: '12px', 
     marginBottom: '10px', 
     flexShrink: 0 
   },
   puBtn: { 
     flex: 1, 
-    backgroundColor: 'rgba(255,255,255,0.05)', 
-    border: '1px solid rgba(255,255,255,0.1)', 
+    border: '1px solid', 
     borderRadius: '15px', 
     padding: '12px 5px', 
     display: 'flex', 
@@ -298,7 +312,7 @@ const s: any = {
     gap: '8px', 
     cursor: 'pointer', 
     color: 'white',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.3s ease'
   },
   puIcon: { 
     fontSize: '1.4rem' 
@@ -358,6 +372,7 @@ const s: any = {
     display: 'flex', 
     flexDirection: 'column', 
     alignItems: 'center', 
-    pointerEvents: 'none' 
+    pointerEvents: 'none',
+    zIndex: 10
   }
 };
