@@ -33,7 +33,7 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher 1: מעבר לשלב התוצאות
+   * Watcher 1: מעבר לשלב התוצאות והענקת כוחות
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
@@ -46,6 +46,7 @@ export function useMultiplayerGameState(roomId: string) {
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
+    // מוודא שכל הקבוצות בחדר סיימו לענות באופן תקין
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished && !isChangingStepRef.current) {
@@ -58,7 +59,7 @@ export function useMultiplayerGameState(roomId: string) {
       const updatePayload: any = {
         step: 6,
         currentQuestionIdx: nextIdx,
-        readyTeams: {}, 
+        readyTeams: null, // תיקון: null מבטיח מחיקה תקנית ללא שגיאות ב-Firebase
         votes: null,
         isCheckpointNext: isCheckpoint
       };
@@ -96,11 +97,12 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomData, roomId]);
 
   /**
-   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה
+   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה (תוקן באג הלופ האין-סופי)
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
-    if (roomData.step === 4 && roomData.roundResults !== null) {
+    // התיקון הקריטי: בודקים אם יש נתונים למחוק, ולא משתמשים ב-null שגורם לשגיאה
+    if (roomData.step === 4 && roomData.roundResults) {
       update(ref(db, `rooms/${roomId}`), {
         roundResults: null,
         votes: null
@@ -128,6 +130,7 @@ export function useMultiplayerGameState(roomId: string) {
     const currentBankTime = data.timeBanks?.[teamName!] || 0;
     const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
     
+    // עדכון בשיטת Deep Paths למניעת דריסות
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
@@ -155,7 +158,7 @@ export function useMultiplayerGameState(roomId: string) {
       roundResults: null,
       timeBanks: teams.reduce((acc: any, name: string) => ({...acc, [name]: 15}), {}), 
       askedQuestions: [], 
-      readyTeams: {},
+      readyTeams: null,
       isCheckpointNext: false,
       powerUps: teams.reduce((acc: any, name: string) => ({...acc, [name]: []}), {}),
       teamEffects: {}

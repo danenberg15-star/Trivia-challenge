@@ -95,7 +95,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת הבוטים - מעודכנת לעדכון אטומי (Atomic Update) למניעת התנגשויות בשרת
+   * לוגיקת בוטים חסינה - עדכון ממוקד למניעת דריסת הצבעות שחקן
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -122,15 +122,16 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
         if (botOnlyTeamIndices.length === 0) return;
 
-        // בניית חבילת עדכון אחת גדולה לשרת
         let botUpdates: any = {};
-        let newVotes = { ...(latestRoom.votes || {}) };
 
         botOnlyTeamIndices.forEach((tIdx: number) => {
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
-          teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
+          // עדכון נתיב ספציפי של כל בוט כדי לא לדרוס הצבעות אנושיות!
+          teamBots.forEach((p: any) => { 
+            botUpdates[`votes/${p.id}`] = botChoice; 
+          });
           
           const currentBankTime = latestRoom.timeBanks?.[teamName] || 0;
           const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
@@ -144,9 +145,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         });
         
         botUpdates[`lastQuestion`] = latestQ;
-        botUpdates[`votes`] = newVotes;
         
-        // נשלח הכל בבת אחת ל-Firebase - מבטיח שאף קבוצה לא תידרס
         ur(botUpdates);
       }, 3000); 
 
@@ -189,23 +188,32 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       } else if (pu === 'freeze') {
         effectData.expiresAt = Date.now() + 10000;
       }
+      
+      // Deep Paths לכוחות עזר
       updateRoom({ 
-        powerUps: { ...safePowerUpsObj, [myTeamName]: myPowerUps },
-        teamEffects: { ...(roomData.teamEffects || {}), [myTeamName]: effectData }
+        [`powerUps/${myTeamName}`]: myPowerUps,
+        [`teamEffects/${myTeamName}`]: effectData
       });
     }
   };
 
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed || isLocked) return; 
-    let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
+    
+    // Deep Paths להצבעה אנושית (לא מוחק הצבעות של אחרים!)
+    let voteUpdates: any = {};
+    voteUpdates[`votes/${userId}`] = optIdx;
+    
     const roomName = (roomData.id || "").toString().trim();
     const isQA = ["עומר", "qa_omer_room", "עומר Q", "עומר q"].includes(roomName);
     
     if (isQA) {
-      myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
+      myTeamPlayers.forEach((p: any) => { 
+        if (p.isBot) voteUpdates[`votes/${p.id}`] = optIdx; 
+      });
     }
-    updateRoom({ votes: newVotes });
+    
+    updateRoom(voteUpdates);
   };
 
   const radius = 50;
