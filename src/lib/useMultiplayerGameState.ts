@@ -37,14 +37,11 @@ export function useMultiplayerGameState(roomId: string) {
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
-    // בדיקה אם כל הקבוצות רשומות כמי שסיימו לענות בסבב הזה
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished) {
       const currentIdx = roomData.currentQuestionIdx || 0;
       const nextIdx = currentIdx + 1;
-      
-      // בדיקה אם השאלה הבאה היא צ'ק-פוינט (כל 5 שאלות)
       const isCheckpoint = nextIdx > 0 && nextIdx % 5 === 0;
       
       const updatePayload: any = {
@@ -55,24 +52,23 @@ export function useMultiplayerGameState(roomId: string) {
         isCheckpointNext: isCheckpoint
       };
 
-      // לוגיקת הענקת כוחות עזר בצ'ק-פוינט
+      // הענקת כוח עזר בכל שאלה חמישית
       if (isCheckpoint) {
         const powerUps = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
         const currentPowerUpsObj = roomData.powerUps || {};
         const updatedPowerUps: any = {};
 
-        // הענקת הכוח לכל הקבוצות בחדר
         allTeams.forEach((name: string) => {
           const teamPUs = currentPowerUpsObj[name] || [];
           updatedPowerUps[name] = [...teamPUs, randomPU];
         });
 
         updatePayload.powerUps = updatedPowerUps;
-        updatePayload.lastGrantedPowerUp = randomPU; // לצורך הצגה במסך הצ'ק-פוינט
+        updatePayload.lastGrantedPowerUp = randomPU;
       }
 
-      // בדיקת תנאי ניצחון/הפסד
+      // בדיקת תנאי ניצחון
       allTeams.forEach((name: string) => {
         if (roomData.timeBanks[name] >= 120) {
           updatePayload.step = 7;
@@ -80,6 +76,7 @@ export function useMultiplayerGameState(roomId: string) {
         }
       });
 
+      // בדיקת תנאי הפסד (Game Over)
       const anyTimeLeft = allTeams.some((name: string) => roomData.timeBanks[name] > 0);
       if (!anyTimeLeft) {
         updatePayload.step = 9;
