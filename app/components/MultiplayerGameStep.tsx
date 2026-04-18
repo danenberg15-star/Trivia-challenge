@@ -29,12 +29,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // Ref לניהול מענה בוטים - מונע כפילויות ומאפשר סנכרון רב-קבוצתי
+  // Refs לניהול יציב של בוטים ללא איפוס הטיימר
   const botHandledRef = useRef<number>(-1);
-  const roomDataRef = useRef(roomData);
+  const latestRoomRef = useRef(roomData);
   
   useEffect(() => {
-    roomDataRef.current = roomData;
+    latestRoomRef.current = roomData;
   }, [roomData]);
 
   useEffect(() => {
@@ -78,6 +78,11 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
+  const latestQuestionRef = useRef(question);
+  useEffect(() => {
+    latestQuestionRef.current = question;
+  }, [question]);
+
   useEffect(() => {
     let interval: any;
     if (isFrozen && currentEffect.expiresAt) {
@@ -89,8 +94,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים חסינה (חדר עומר):
-   * מטפלת ב-2 קבוצות, 3 קבוצות וכל שילוב אחר.
+   * לוגיקת הבוטים (חדר עומר) - גרסה חסינה לחלוטין!
+   * התלויות של ה-useEffect צומצמו למינימום. הטיימר לא יתאפס כשהשעון יורד
+   * או כשאתה לוחץ על תשובה.
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -99,26 +105,33 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
     if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
       const timer = setTimeout(() => {
-        const latestRoom = roomDataRef.current;
-        if (latestRoom.step !== 5 || botHandledRef.current === currentQ) return;
-        
+        // מניעת הפעלה כפולה באותה שאלה
+        if (botHandledRef.current === currentQ) return;
         botHandledRef.current = currentQ;
+        
+        const latestRoom = latestRoomRef.current;
+        const latestQ = latestQuestionRef.current;
+        
+        if (latestRoom.step !== 5) return;
+        
         const shouldBeCorrect = (currentQ % 2 === 0);
-        const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
+        const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
         
         const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
         const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
+        // מאתר את כל הקבוצות שאין בהן שחקנים אנושיים
         const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
         let newVotes = { ...(latestRoom.votes || {}) };
 
+        // מעבר על כל קבוצות הבוטים ושליחת התשובות
         botOnlyTeamIndices.forEach((tIdx: number) => {
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
           teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
           
-          handleAnswer(shouldBeCorrect, 15, question, teamName);
+          handleAnswer(shouldBeCorrect, 15, latestQ, teamName);
         });
         
         updateRoom({ votes: newVotes });
@@ -126,7 +139,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       return () => clearTimeout(timer);
     }
-  }, [roomData.currentQuestionIdx, isReadingDelay, question, roomData.id, handleAnswer, updateRoom]);
+  // תלויות מינימליות - ימנעו מהטיימר להתאפס!
+  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id]); 
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
