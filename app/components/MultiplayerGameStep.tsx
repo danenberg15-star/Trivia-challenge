@@ -28,6 +28,9 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
+  
+  // שימוש ב-Ref כדי למנוע מהבוטים לענות פעמיים באותה שאלה או להתאפס
+  const botAnsweredForIdx = useRef<number>(-1);
 
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
@@ -49,7 +52,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay, isLocked]);
 
-  // לוגיקת בחירת שאלה ליניארית (1 -> 2 -> 3+4)
+  // לוגיקת בחירת שאלה ליניארית (1-1 -> 2-2 -> 3/4)
   const question = useMemo(() => {
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
@@ -84,33 +87,37 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
-  // לוגיקת בוטים משודרגת לחדר עומר - כולל נעילה אוטומטית עבורם
+  // לוגיקת בוטים משופרת - חדר עומר
   useEffect(() => {
     const isOmerRoom = roomData.id === 'עומר' || roomData.id === 'qa_omer_room';
-    if (isOmerRoom && !isFrozen && !hasFailed && !isReadingDelay) {
+    const qIdx = roomData.currentQuestionIdx || 0;
+
+    if (isOmerRoom && !isReadingDelay && botAnsweredForIdx.current !== qIdx) {
+      // הטיימר מתחיל בדיוק כשהשהיית הקריאה מסתיימת (סך הכל 5 שניות מהופעת השאלה)
       const botTimer = setTimeout(() => {
         const currentRoom = roomDataRef.current;
-        if (currentRoom.step !== 5) return;
+        if (currentRoom.step !== 5 || botAnsweredForIdx.current === qIdx) return;
+        
+        botAnsweredForIdx.current = qIdx; // סימון שהבוט ענה על השאלה הנוכחית
         
         const botTeamIdx = 1; 
-        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        const botTeamName = currentRoom.teamNames[botTeamIdx];
+        const shouldBeCorrect = (qIdx % 2 === 0);
+        const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
         
-        if (botPlayers.length > 0) {
-          const shouldBeCorrect = (currentRoom.currentQuestionIdx % 2 === 0);
-          const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
-          
-          let newVotes = { ...(currentRoom.votes || {}) };
-          botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
-          updateRoom({ votes: newVotes });
+        const botPlayers = currentRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        let newVotes = { ...(currentRoom.votes || {}) };
+        botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
+        
+        updateRoom({ votes: newVotes });
+        
+        // שליחת התשובה עבור קבוצת הבוטים
+        handleAnswer(shouldBeCorrect, 15, question, botTeamName);
+      }, 3000); // 3 שניות + 2 שניות השהיית קריאה = 5 שניות בדיוק
 
-          // תיקון: השחקן האנושי מעדכן את התוצאה עבור הבוטים כדי שהמשחק לא יתקע
-          const botTeamName = currentRoom.teamNames[botTeamIdx];
-          handleAnswer(shouldBeCorrect, 15, question, botTeamName);
-        }
-      }, 5000); 
       return () => clearTimeout(botTimer);
     }
-  }, [roomData.currentQuestionIdx, roomData.id, isFrozen, hasFailed, isReadingDelay, question, handleAnswer, updateRoom]);
+  }, [roomData.currentQuestionIdx, roomData.id, isReadingDelay, question, handleAnswer, updateRoom]);
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -118,7 +125,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const firstVote = myTeamVotes[0];
   const allAgreed = allVoted && myTeamVotes.every((v: any) => v === firstVote);
 
-  // נעילה אוטומטית בקונצנזוס
   useEffect(() => {
     if (allAgreed && !isLocked && !isReadingDelay) {
       setIsLocked(true);
@@ -338,8 +344,13 @@ const s: any = {
     color: 'white', 
     transition: 'all 0.3s ease' 
   },
-  puIcon: { fontSize: '1.4rem' },
-  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
+  puIcon: { 
+    fontSize: '1.4rem' 
+  },
+  puCount: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 
