@@ -316,31 +316,38 @@ const s: any = {
     padding: '10px 5px', 
     boxSizing: 'border-box' 
   },
+  
+  // כאן העיצוב החדש של הכוחות - לרוחב מלא, עם flex: 1, ופונט גדול יותר
   powerUpsRow: { 
     display: 'flex', 
-    justifyContent: 'center', 
+    justifyContent: 'space-between', 
+    width: '100%',
     gap: '10px', 
     marginBottom: '10px', 
     flexShrink: 0 
   },
   puBtn: { 
+    flex: 1, // הכפתורים יתחלקו ברוחב באופן שווה
     backgroundColor: 'rgba(255,255,255,0.05)', 
     border: '1px solid rgba(255,255,255,0.1)', 
-    borderRadius: '12px', 
-    padding: '8px 12px', 
+    borderRadius: '15px', 
+    padding: '12px 5px', 
     display: 'flex', 
     alignItems: 'center', 
-    gap: '6px', 
+    justifyContent: 'center', // ממורכז היטב
+    gap: '8px', 
     cursor: 'pointer', 
-    color: 'white' 
+    color: 'white',
+    transition: 'all 0.2s ease'
   },
   puIcon: { 
-    fontSize: '1rem' 
+    fontSize: '1.4rem' // אייקון גדול יותר
   },
   puCount: { 
-    fontSize: '0.8rem', 
+    fontSize: '1.1rem', // טקסט מונה גדול וקריא יותר
     fontWeight: 'bold' 
   },
+
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 

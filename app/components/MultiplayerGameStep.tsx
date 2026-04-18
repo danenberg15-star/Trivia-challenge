@@ -170,7 +170,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       </div>
 
       <div style={s.contentArea}>
-        {/* יישור קו לעיצוב והלוגיקה של המשחק האישי */}
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps?.[myTeamName] || []).filter((p: string) => p === type).length;
@@ -240,11 +239,31 @@ const s: any = {
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
   
-  // הוחלפו סגנונות הכוחות לאלו המדויקים של מסך הסולו
-  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px', flexShrink: 0 },
-  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
-  puIcon: { fontSize: '1rem' },
-  puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
+  // העיצוב החדש והרחב (זהה למשחק האישי)
+  powerUpsRow: { 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    width: '100%',
+    gap: '10px', 
+    marginBottom: '10px', 
+    flexShrink: 0 
+  },
+  puBtn: { 
+    flex: 1, 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    border: '1px solid rgba(255,255,255,0.1)', 
+    borderRadius: '15px', 
+    padding: '12px 5px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: '8px', 
+    cursor: 'pointer', 
+    color: 'white',
+    transition: 'all 0.2s ease'
+  },
+  puIcon: { fontSize: '1.4rem' },
+  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
 
   questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
   questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
