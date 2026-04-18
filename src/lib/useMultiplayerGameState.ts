@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from './firebase';
 import { ref, onValue, update } from 'firebase/database';
 
@@ -9,6 +9,9 @@ export function useMultiplayerGameState(roomId: string) {
   const [userId, setUserId] = useState<string>('');
   const [roomData, setRoomData] = useState<any>(null);
   const [step, setStep] = useState(3); 
+
+  const roomDataRef = useRef<any>(null);
+  const isChangingStepRef = useRef(false); 
 
   useEffect(() => {
     const savedId = localStorage.getItem('trivia_user_id') || '';
@@ -22,6 +25,7 @@ export function useMultiplayerGameState(roomId: string) {
       const data = snapshot.val();
       if (data) {
         setRoomData(data);
+        roomDataRef.current = data;
         if (data.step) setStep(data.step);
       }
     });
@@ -29,18 +33,24 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher 1: מעבר לשלב התוצאות והענקת כוחות
+   * Watcher 1: מעבר לשלב התוצאות
    */
   useEffect(() => {
-    if (!roomData || roomData.step !== 5 || !roomId) return;
+    if (!roomData || !roomId) return;
+
+    if (roomData.step !== 5) {
+      isChangingStepRef.current = false;
+      return;
+    }
 
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
-    // בדיקה אם כל הקבוצות רשומות כמי שסיימו לענות ב-Firebase
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
-    if (allFinished) {
+    if (allFinished && !isChangingStepRef.current) {
+      isChangingStepRef.current = true; 
+
       const currentIdx = roomData.currentQuestionIdx || 0;
       const nextIdx = currentIdx + 1;
       const isCheckpoint = nextIdx > 0 && nextIdx % 5 === 0;
@@ -53,7 +63,6 @@ export function useMultiplayerGameState(roomId: string) {
         isCheckpointNext: isCheckpoint
       };
 
-      // הענקת כוח עזר אקראי לכל הקבוצות בחדר בצ'ק-פוינט
       if (isCheckpoint) {
         const powerUps = ['50:50', 'freeze', 'slow-mo'];
         const randomPU = powerUps[Math.floor(Math.random() * powerUps.length)];
@@ -69,7 +78,6 @@ export function useMultiplayerGameState(roomId: string) {
         updatePayload.lastGrantedPowerUp = randomPU;
       }
 
-      // בדיקת תנאי ניצחון
       allTeams.forEach((name: string) => {
         if (roomData.timeBanks[name] >= 120) {
           updatePayload.step = 7;
@@ -77,7 +85,6 @@ export function useMultiplayerGameState(roomId: string) {
         }
       });
 
-      // בדיקת תנאי הפסד גלובלי
       const anyTimeLeft = allTeams.some((name: string) => roomData.timeBanks[name] > 0);
       if (!anyTimeLeft) {
         updatePayload.step = 9;
@@ -89,12 +96,10 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomData, roomId]);
 
   /**
-   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה (מניעת לופים)
+   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
-    
-    // ברגע שהמשחק עובר לשלב 4 (ספירה לאחור), מנקים את נתוני הסבב הקודם
     if (roomData.step === 4 && roomData.roundResults !== null) {
       update(ref(db, `rooms/${roomId}`), {
         roundResults: null,
@@ -103,24 +108,26 @@ export function useMultiplayerGameState(roomId: string) {
     }
   }, [roomData?.step, roomId, roomData?.roundResults]);
 
-  const updateRoom = (updates: any) => {
+  const updateRoom = useCallback((updates: any) => {
     if (roomId) update(ref(db, `rooms/${roomId}`), updates);
-  };
+  }, [roomId]);
 
-  const handleAnswer = (isCorrect: boolean, timeAtAnswer: number, questionObj: any, teamToUpdate?: string) => {
-    if (!roomData || !roomId) return;
+  const handleAnswer = useCallback((isCorrect: boolean, timeAtAnswer: number, questionObj: any, teamToUpdate?: string) => {
+    if (!roomId) return;
     
+    const data = roomDataRef.current;
+    if (!data) return;
+
     let teamName = teamToUpdate;
     if (!teamName) {
-      const me = roomData.players.find((p: any) => p.id === userId);
+      const me = data.players.find((p: any) => p.id === userId);
       if (!me) return;
-      teamName = roomData.teamNames[me.teamIdx];
+      teamName = data.teamNames[me.teamIdx];
     }
     
-    const currentBankTime = roomData.timeBanks[teamName!] || 0;
+    const currentBankTime = data.timeBanks?.[teamName!] || 0;
     const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
     
-    // עדכון אטומי של נתיבי המידע של הקבוצה בלבד
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
@@ -131,24 +138,29 @@ export function useMultiplayerGameState(roomId: string) {
     updates[`lastQuestion`] = questionObj;
 
     update(ref(db, `rooms/${roomId}`), updates);
-  };
+  }, [roomId, userId]);
 
-  const restartGame = () => {
+  const restartGame = useCallback(() => {
+    const data = roomDataRef.current;
+    if (!data) return;
+    
     const seed = coprimes[Math.floor(Math.random() * coprimes.length)];
+    const teams = data.teamNames || ['קבוצה 1', 'קבוצה 2'];
+    
     updateRoom({ 
       step: 3, 
       currentQuestionIdx: 0, 
       seed, 
       votes: null, 
       roundResults: null,
-      timeBanks: roomData.teamNames.reduce((acc: any, name: string) => ({...acc, [name]: 15}), {}), 
+      timeBanks: teams.reduce((acc: any, name: string) => ({...acc, [name]: 15}), {}), 
       askedQuestions: [], 
       readyTeams: {},
       isCheckpointNext: false,
-      powerUps: roomData.teamNames.reduce((acc: any, name: string) => ({...acc, [name]: []}), {}),
+      powerUps: teams.reduce((acc: any, name: string) => ({...acc, [name]: []}), {}),
       teamEffects: {}
     });
-  };
+  }, [updateRoom]);
 
   return { userId, roomData, step, updateRoom, handleAnswer, restartGame };
 }

@@ -29,12 +29,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // Refs שהופכים את הבוטים ל"בלתי פגיעים" לרענוני מסך או לחיצות
   const botHandledRef = useRef<number>(-1);
   const latestRoomRef = useRef(roomData);
   const actionsRef = useRef({ handleAnswer, updateRoom });
   
-  // שומרים תמיד על גרסה עדכנית של הפונקציות והנתונים בלי לגרום לטיימר להתאפס
   useEffect(() => {
     latestRoomRef.current = roomData;
     actionsRef.current = { handleAnswer, updateRoom };
@@ -97,8 +95,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים חסינה לחלוטין.
-   * תלויה אך ורק במספר השאלה, כך שלעולם לא תתאפס כשאתה בוחר תשובה או כשהשעון יורד!
+   * לוגיקת הבוטים - מעודכנת לעדכון אטומי (Atomic Update) למניעת התנגשויות בשרת
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -112,7 +109,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         
         const latestRoom = latestRoomRef.current;
         const latestQ = latestQuestionRef.current;
-        const { handleAnswer: ha, updateRoom: ur } = actionsRef.current;
+        const { updateRoom: ur } = actionsRef.current;
         
         if (latestRoom.step !== 5) return;
         
@@ -123,6 +120,10 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
         const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
+        if (botOnlyTeamIndices.length === 0) return;
+
+        // בניית חבילת עדכון אחת גדולה לשרת
+        let botUpdates: any = {};
         let newVotes = { ...(latestRoom.votes || {}) };
 
         botOnlyTeamIndices.forEach((tIdx: number) => {
@@ -130,15 +131,27 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
           teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
-          ha(shouldBeCorrect, 15, latestQ, teamName);
+          
+          const currentBankTime = latestRoom.timeBanks?.[teamName] || 0;
+          const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
+          
+          botUpdates[`timeBanks/${teamName}`] = newTime;
+          botUpdates[`roundResults/${teamName}`] = {
+            isCorrect: shouldBeCorrect,
+            finalTime: newTime,
+            answered: true
+          };
         });
         
-        ur({ votes: newVotes });
+        botUpdates[`lastQuestion`] = latestQ;
+        botUpdates[`votes`] = newVotes;
+        
+        // נשלח הכל בבת אחת ל-Firebase - מבטיח שאף קבוצה לא תידרס
+        ur(botUpdates);
       }, 3000); 
 
       return () => clearTimeout(timer);
     }
-  // השורה הבאה היא הקסם - מונעת מהטיימר להתאפס כי אין כאן את משתנה הזמן או ההצבעה!
   }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id]); 
 
   const votes = roomData.votes || {};
