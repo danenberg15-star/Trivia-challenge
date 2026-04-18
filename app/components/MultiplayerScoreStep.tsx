@@ -20,7 +20,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
   useEffect(() => {
     if (hasInitialized.current) return;
 
-    // 1. אתחול זמנים לתצוגה (הערך שהיה לפני הבונוס/קנס)
+    // 1. אתחול זמנים לתצוגה (הערך לפני הבונוס/קנס)
     const initialTimes: any = {};
     teamNames.forEach((name: string) => {
       const result = roundResults[name];
@@ -34,7 +34,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     setDisplayTimes(initialTimes);
     hasInitialized.current = true;
 
-    // 2. השמעת סאונד
+    // 2. השמעת סאונד - Cheer אם מישהו צדק, Boo אם כולם טעו
     const anyoneCorrect = Object.values(roundResults).some((r: any) => r.isCorrect);
     if (typeof Audio !== "undefined") {
       audioRef.current = new Audio(anyoneCorrect ? '/Cheer.m4a' : '/Boo.m4a');
@@ -52,18 +52,20 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
   }, [roomData.timeBanks, roundResults, teamNames]);
 
   /**
-   * תיקון לחדר עומר: בוטים הופכים למוכנים אוטומטית
-   * ללא הלוגיקה הזו, המשחק יתקע כי הבוטים לא לוחצים על הכפתור.
+   * תיקון לריבוי קבוצות בחדר עומר:
+   * כל קבוצה שאינה קבוצת השחקן (כלומר קבוצות בוטים) הופכת למוכנה אוטומטית.
    */
   useEffect(() => {
-    const isQA = roomData.id === "עומר" || roomData.id === "qa_omer_room";
+    const roomName = (roomData.id || "").toString().trim();
+    const isQA = roomName === "עומר" || roomName === "qa_omer_room";
+    
     if (isQA && showReveal) {
       const timer = setTimeout(() => {
         const newReady = { ...readyTeams };
         let changed = false;
 
         teamNames.forEach((name: string) => {
-          // אם זו קבוצה שאין בה את השחקן הנוכחי (ב-QA זה אומר קבוצת הבוטים)
+          // ב-QA, כל קבוצה שהיא לא הקבוצה של המשתמש נחשבת לקבוצת בוטים
           if (name !== myTeamName && !newReady[name]) {
             newReady[name] = true;
             changed = true;
@@ -73,7 +75,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
         if (changed) {
           updateRoom({ readyTeams: newReady });
         }
-      }, 3000); // הבוטים הופכים למוכנים 3 שניות אחרי חשיפת התשובה
+      }, 3000); 
 
       return () => clearTimeout(timer);
     }
