@@ -29,7 +29,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // שימוש ב-Ref כדי לוודא שהבוט פועל רק פעם אחת בכל שאלה ולא מתאפס
+  // Ref לניהול מענה בוטים - מונע כפילויות ומאפשר סנכרון
   const botHandledRef = useRef<number>(-1);
   const roomDataRef = useRef(roomData);
   
@@ -73,32 +73,44 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
-  // לוגיקת בוטים (חדר עומר) - חסינה להתאפסויות
+  /**
+   * לוגיקת בוטים דינמית (תיקון לריבוי קבוצות):
+   * המערכת סורקת את כל הקבוצות. כל קבוצה שאין בה שחקן אנושי תענה אוטומטית.
+   */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
     const roomName = (roomData.id || "").toString().trim();
     const isQA = roomName === "עומר" || roomName === "qa_omer_room";
 
     if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
-      // טיימר הבוטים מתחיל ורץ עד הסוף בלי קשר לשינויי סטייט אחרים
       const timer = setTimeout(() => {
         const latestRoom = roomDataRef.current;
         if (latestRoom.step !== 5 || botHandledRef.current === currentQ) return;
         
         botHandledRef.current = currentQ;
-        
-        const botTeamIdx = 1; 
-        const botTeamName = latestRoom.teamNames[botTeamIdx];
         const shouldBeCorrect = (currentQ % 2 === 0);
         const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
         
-        const botPlayers = latestRoom.players.filter((p: any) => p.teamIdx === botTeamIdx && p.isBot);
+        // מציאת כל הקבוצות שאין בהן שחקנים אנושיים
+        const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
+        const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
+        const botTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
+
         let newVotes = { ...(latestRoom.votes || {}) };
-        botPlayers.forEach((p: any) => { newVotes[p.id] = botChoice; });
+
+        botTeamIndices.forEach((tIdx: number) => {
+          const teamName = latestRoom.teamNames[tIdx];
+          const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
+          
+          // הצבעת בוטים
+          teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
+          
+          // שליחת תשובה לכל קבוצת בוטים בנפרד
+          handleAnswer(shouldBeCorrect, 15, question, teamName);
+        });
         
         updateRoom({ votes: newVotes });
-        handleAnswer(shouldBeCorrect, 15, question, botTeamName);
-      }, 3000); // 3 שניות + 2 שניות השהיית קריאה = 5 שניות
+      }, 3000); 
 
       return () => clearTimeout(timer);
     }
@@ -371,13 +383,8 @@ const s: any = {
     color: 'white', 
     transition: 'all 0.3s ease' 
   },
-  puIcon: { 
-    fontSize: '1.4rem' 
-  },
-  puCount: { 
-    fontSize: '1.1rem', 
-    fontWeight: 'bold' 
-  },
+  puIcon: { fontSize: '1.4rem' },
+  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 
