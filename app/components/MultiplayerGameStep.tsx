@@ -29,7 +29,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // Ref לניהול מענה בוטים - מונע כפילויות ומאפשר סנכרון
   const botHandledRef = useRef<number>(-1);
   const roomDataRef = useRef(roomData);
   
@@ -60,9 +59,14 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const question = useMemo(() => {
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
-    if (qIdx < 2) pool = ALL_QUESTIONS.filter(q => q.level === 1);
-    else if (qIdx < 4) pool = ALL_QUESTIONS.filter(q => q.level === 2);
-    else pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
+
+    if (qIdx < 2) {
+      pool = ALL_QUESTIONS.filter(q => q.level === 1);
+    } else if (qIdx < 4) {
+      pool = ALL_QUESTIONS.filter(q => q.level === 2);
+    } else {
+      pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
+    }
 
     const askedTexts = roomData.askedQuestions || [];
     let filteredPool = pool.filter(q => !askedTexts.includes(q.text));
@@ -73,9 +77,18 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
+  useEffect(() => {
+    let interval: any;
+    if (isFrozen && currentEffect.expiresAt) {
+      const calculateRemain = () => Math.max(0, Math.ceil((currentEffect.expiresAt - Date.now()) / 1000));
+      setFreezeCountdown(calculateRemain());
+      interval = setInterval(() => setFreezeCountdown(calculateRemain()), 500); 
+    }
+    return () => clearInterval(interval);
+  }, [isFrozen, currentEffect.expiresAt]);
+
   /**
-   * לוגיקת בוטים דינמית (תיקון לריבוי קבוצות):
-   * המערכת סורקת את כל הקבוצות. כל קבוצה שאין בה שחקן אנושי תענה אוטומטית.
+   * לוגיקת בוטים משופרת לריבוי קבוצות (חדר עומר)
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -91,21 +104,20 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         const shouldBeCorrect = (currentQ % 2 === 0);
         const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
         
-        // מציאת כל הקבוצות שאין בהן שחקנים אנושיים
+        // מציאת כל האינדקסים של הקבוצות שאין בהן שחקנים אנושיים
         const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
         const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-        const botTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
+        const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
         let newVotes = { ...(latestRoom.votes || {}) };
 
-        botTeamIndices.forEach((tIdx: number) => {
+        botOnlyTeamIndices.forEach((tIdx: number) => {
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
-          // הצבעת בוטים
           teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
           
-          // שליחת תשובה לכל קבוצת בוטים בנפרד
+          // סיום סבב עבור כל קבוצת בוטים בנפרד
           handleAnswer(shouldBeCorrect, 15, question, teamName);
         });
         
@@ -383,8 +395,13 @@ const s: any = {
     color: 'white', 
     transition: 'all 0.3s ease' 
   },
-  puIcon: { fontSize: '1.4rem' },
-  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
+  puIcon: { 
+    fontSize: '1.4rem' 
+  },
+  puCount: { 
+    fontSize: '1.1rem', 
+    fontWeight: 'bold' 
+  },
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 
