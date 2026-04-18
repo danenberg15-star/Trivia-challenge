@@ -95,7 +95,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים חסינה - עדכון ממוקד למניעת דריסת הצבעות שחקן
+   * לוגיקת הבוטים - מעודכנת לעדכון אטומי
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -128,7 +128,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
-          // עדכון נתיב ספציפי של כל בוט כדי לא לדרוס הצבעות אנושיות!
           teamBots.forEach((p: any) => { 
             botUpdates[`votes/${p.id}`] = botChoice; 
           });
@@ -152,6 +151,43 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       return () => clearTimeout(timer);
     }
   }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id]); 
+
+  // ============== מנגנון חילוץ חסין לחלוטין (Failsafe) ==============
+  useEffect(() => {
+    if ((isLocked || timeLeft <= 0) && !isReadingDelay) {
+      const rescueTimer = setTimeout(() => {
+        const latestRoom = latestRoomRef.current;
+        if (!latestRoom || latestRoom.step !== 5) return;
+
+        const teams = latestRoom.teamNames || [];
+        const results = latestRoom.roundResults || {};
+        let emergencyUpdates: any = {};
+        let neededRescue = false;
+
+        teams.forEach((t: string) => {
+          if (!results[t] || results[t].answered !== true) {
+            neededRescue = true;
+            const currentBank = latestRoom.timeBanks?.[t] || 0;
+            const penaltyTime = Math.max(0, currentBank - 7);
+
+            emergencyUpdates[`timeBanks/${t}`] = penaltyTime;
+            emergencyUpdates[`roundResults/${t}`] = {
+              isCorrect: false,
+              finalTime: penaltyTime,
+              answered: true
+            };
+          }
+        });
+
+        if (neededRescue) {
+          actionsRef.current.updateRoom(emergencyUpdates);
+        }
+      }, 4000); // 4 שניות אחרי הנעילה/זמן אפס, מוודא שאף אחד לא נתקע
+
+      return () => clearTimeout(rescueTimer);
+    }
+  }, [isLocked, timeLeft, isReadingDelay]);
+  // ====================================================================
 
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
@@ -189,7 +225,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         effectData.expiresAt = Date.now() + 10000;
       }
       
-      // Deep Paths לכוחות עזר
       updateRoom({ 
         [`powerUps/${myTeamName}`]: myPowerUps,
         [`teamEffects/${myTeamName}`]: effectData
@@ -200,7 +235,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed || isLocked) return; 
     
-    // Deep Paths להצבעה אנושית (לא מוחק הצבעות של אחרים!)
     let voteUpdates: any = {};
     voteUpdates[`votes/${userId}`] = optIdx;
     

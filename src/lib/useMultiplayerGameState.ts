@@ -59,7 +59,7 @@ export function useMultiplayerGameState(roomId: string) {
       const updatePayload: any = {
         step: 6,
         currentQuestionIdx: nextIdx,
-        readyTeams: null, // תיקון: null מבטיח מחיקה תקנית ללא שגיאות ב-Firebase
+        readyTeams: null, 
         votes: null,
         isCheckpointNext: isCheckpoint
       };
@@ -92,26 +92,25 @@ export function useMultiplayerGameState(roomId: string) {
         updatePayload.winnerName = "Game Over";
       }
 
-      update(ref(db, `rooms/${roomId}`), updatePayload);
+      update(ref(db, `rooms/${roomId}`), updatePayload).catch(console.error);
     }
   }, [roomData, roomId]);
 
   /**
-   * Watcher 2: ניקוי נתונים לקראת השאלה הבאה (תוקן באג הלופ האין-סופי)
+   * Watcher 2: ניקוי נתונים
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
-    // התיקון הקריטי: בודקים אם יש נתונים למחוק, ולא משתמשים ב-null שגורם לשגיאה
     if (roomData.step === 4 && roomData.roundResults) {
       update(ref(db, `rooms/${roomId}`), {
         roundResults: null,
         votes: null
-      });
+      }).catch(console.error);
     }
   }, [roomData?.step, roomId, roomData?.roundResults]);
 
   const updateRoom = useCallback((updates: any) => {
-    if (roomId) update(ref(db, `rooms/${roomId}`), updates);
+    if (roomId) update(ref(db, `rooms/${roomId}`), updates).catch(console.error);
   }, [roomId]);
 
   const handleAnswer = useCallback((isCorrect: boolean, timeAtAnswer: number, questionObj: any, teamToUpdate?: string) => {
@@ -130,7 +129,6 @@ export function useMultiplayerGameState(roomId: string) {
     const currentBankTime = data.timeBanks?.[teamName!] || 0;
     const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
     
-    // עדכון בשיטת Deep Paths למניעת דריסות
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
@@ -140,7 +138,7 @@ export function useMultiplayerGameState(roomId: string) {
     };
     updates[`lastQuestion`] = questionObj;
 
-    update(ref(db, `rooms/${roomId}`), updates);
+    update(ref(db, `rooms/${roomId}`), updates).catch(console.error);
   }, [roomId, userId]);
 
   const restartGame = useCallback(() => {
