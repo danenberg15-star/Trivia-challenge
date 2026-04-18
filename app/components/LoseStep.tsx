@@ -3,10 +3,11 @@ import React from "react";
 
 interface LoseStepProps {
   score: number;
+  timeAlive?: number; // תוספת: זמן הישרדות בשניות
   onRestart: () => void;
 }
 
-export default function LoseStep({ score, onRestart }: LoseStepProps) {
+export default function LoseStep({ score, timeAlive, onRestart }: LoseStepProps) {
   return (
     <div style={s.layout}>
       <div style={s.container}>
@@ -17,6 +18,14 @@ export default function LoseStep({ score, onRestart }: LoseStepProps) {
           <div style={s.scoreLabel}>הספקת לצבור:</div>
           <div style={s.scoreVal}>{Math.round(score)}</div>
           <div style={s.scoreUnit}>נקודות</div>
+          
+          {/* תצוגת זמן ההישרדות אם הועבר נתון */}
+          {timeAlive !== undefined && timeAlive > 0 && (
+            <div style={s.timeAliveBox}>
+              <span style={s.timeAliveLabel}>זמן הישרדות:</span>
+              <span style={s.timeAliveVal}>{timeAlive} שניות</span>
+            </div>
+          )}
         </div>
 
         <p style={s.text}>לא נורא, הטיימר היה מהיר הפעם...<br/>אולי בסיבוב הבא תצליח לשבור את השיא!</p>
@@ -81,6 +90,25 @@ const s: any = {
     fontSize: '0.8rem',
     color: '#ef4444',
     opacity: 0.7
+  },
+  timeAliveBox: {
+    marginTop: '15px',
+    paddingTop: '15px',
+    borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'baseline',
+    gap: '8px'
+  },
+  timeAliveLabel: {
+    fontSize: '1rem',
+    color: '#ef4444',
+    opacity: 0.9
+  },
+  timeAliveVal: {
+    fontSize: '1.2rem',
+    fontWeight: 'bold',
+    color: 'white'
   },
   text: { 
     fontSize: '1.1rem', 

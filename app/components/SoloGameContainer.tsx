@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db } from "../../src/lib/firebase"; 
 import { ref, push, set } from "firebase/database"; 
 import CountdownStep from "./CountdownStep";
@@ -19,8 +19,10 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   const [step, setStep] = useState(4);
   const [finalScore, setFinalScore] = useState(0); 
   const [lastPU, setLastPU] = useState<string>(""); 
-
-  // יצירת מזהה עקבי לסשן הנוכחי לצורך עדכון רציף
+  
+  // תוספות למדידת זמן הישרדות ושמירה רציפה
+  const [gameStartTime, setGameStartTime] = useState<number | null>(null);
+  const [timeAlive, setTimeAlive] = useState(0);
   const [sessionId, setSessionId] = useState(() => `solo_${userId}_${Date.now()}`);
 
   const [roomData, setRoomData] = useState<any>({
@@ -39,13 +41,20 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     lastCorrect: false
   });
 
+  // תיעוד רגע תחילת המשחק (שלב 5) לצורך חישוב זמן הישרדות בלבד
+  useEffect(() => {
+    if (step === 5 && !gameStartTime) {
+      setGameStartTime(Date.now());
+    }
+  }, [step, gameStartTime]);
+
   const updateRoom = (updates: any) => {
     setRoomData((prev: any) => ({ ...prev, ...updates }));
     if (updates.step !== undefined) setStep(updates.step);
   };
 
-  // פונקציית עזר המבצעת שמירה פסיבית בזמן אמת ללא השפעה על המשחק
-  const saveMidGameScore = (currentCorrectCount: number) => {
+  // פונקציה פסיבית לשמירת ניקוד וזמן הישרדות בזמן אמת
+  const saveLiveProgress = (currentCorrectCount: number) => {
     if (currentCorrectCount <= 0) return;
 
     let score = currentCorrectCount * 10;
@@ -53,20 +62,23 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     if (roomData.difficulty === 'easy') { score = score / 4; difficultyLabel = "קל"; }
     else if (roomData.difficulty === 'hard') { score = score * 2; difficultyLabel = "קשה"; }
 
+    const survivalSeconds = gameStartTime ? Math.floor((Date.now() - gameStartTime) / 1000) : 0;
+
     const scoreData = {
       name: userName,
       score: Math.round(score),
       date: Date.now(),
       difficulty: difficultyLabel,
-      gameId: sessionId
+      gameId: sessionId,
+      timeAlive: survivalSeconds
     };
 
-    // שימוש ב-set כדי לדרוס את הרשומה של אמצע המשחק במקום לייצר חדשות
+    // עדכון הרשומה הקיימת בענן (דריסה לפי sessionId)
     set(ref(db, `highscores/${sessionId}`), scoreData);
-
-    // דריסה מקומית זהה
-    const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
-    const filteredLocal = localScores.filter((s: any) => s.gameId !== sessionId);
+    
+    // עדכון מקומי
+    const localData = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
+    const filteredLocal = localData.filter((s: any) => s.gameId !== sessionId);
     filteredLocal.push(scoreData);
     localStorage.setItem('trivia_solo_highscores', JSON.stringify(filteredLocal.sort((a:any, b:any) => b.score - a.score).slice(0, 50)));
   };
@@ -91,17 +103,19 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     }
 
     const finalResult = Math.max(0, Math.round(score));
-    const timestamp = Date.now();
+    const survivalSeconds = gameStartTime ? Math.floor((Date.now() - gameStartTime) / 1000) : 0;
+    setTimeAlive(survivalSeconds); // עדכון לתצוגה במסך ההפסד
 
     const scoreData = {
       name: userName,
       score: finalResult,
-      date: timestamp,
+      date: Date.now(),
       difficulty: difficultyLabel,
-      gameId: sessionId // שימוש באותו מזהה
+      gameId: sessionId,
+      timeAlive: survivalSeconds
     };
 
-    // החלפתי את ה-push ב-set כדי להבטיח דריסה סופית ונקייה
+    // שמירה סופית
     set(ref(db, `highscores/${sessionId}`), scoreData);
 
     const localScores = JSON.parse(localStorage.getItem('trivia_solo_highscores') || '[]');
@@ -121,9 +135,9 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
     const questionText = typeof questionObj === 'string' ? questionObj : questionObj?.text;
     const updatedAsked = [...(roomData.askedQuestions || []), questionText];
 
-    // -- התוספת היחידה ללוגיקת התשובות: שמירה פסיבית אם צדקנו --
+    // שמירה שקטה של ההתקדמות אם התשובה נכונה
     if (isCorrect) {
-      saveMidGameScore(newCorrectCount);
+      saveLiveProgress(newCorrectCount);
     }
 
     const updatedData = { 
@@ -164,8 +178,10 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   };
 
   const onRestart = () => {
-    // יצירת מזהה סשן חדש לגמרי למשחק החדש
+    // אתחול מזהה סשן ומדידות זמן
     setSessionId(`solo_${userId}_${Date.now()}`);
+    setGameStartTime(null);
+    setTimeAlive(0);
     
     setRoomData((prev: any) => ({
       ...prev,
@@ -183,7 +199,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
   };
 
   return (
-    <div style={{ position: 'relative', height: '100dvh', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height: '100dvh', overflow: 'hidden', backgroundColor: '#05081c' }}>
       <button 
         onClick={onExit} 
         style={{ 
@@ -252,6 +268,7 @@ export default function SoloGameContainer({ userId, userName, onExit }: SoloGame
       {step === 9 && (
         <LoseStep 
           score={finalScore} 
+          timeAlive={timeAlive}
           onRestart={onRestart} 
         />
       )}
