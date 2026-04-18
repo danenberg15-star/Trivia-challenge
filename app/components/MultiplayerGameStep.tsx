@@ -170,14 +170,24 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       </div>
 
       <div style={s.contentArea}>
-        <div style={s.powerUpsContainer}>
-          {(roomData.powerUps?.[myTeamName] || []).map((pu: string, i: number) => (
-             <button key={i} onClick={() => handlePowerUpClick(pu)} style={s.puBtn}>
-                {pu === '50:50' && '🌗 50:50'}
-                {pu === 'freeze' && '❄️ הקפאה'}
-                {pu === 'slow-mo' && '🐢 האטה'}
-             </button>
-          ))}
+        {/* יישור קו לעיצוב והלוגיקה של המשחק האישי */}
+        <div style={s.powerUpsRow}>
+          {['50:50', 'freeze', 'slow-mo'].map(type => {
+            const count = (roomData.powerUps?.[myTeamName] || []).filter((p: string) => p === type).length;
+            return (
+              <button 
+                key={type} 
+                onClick={() => handlePowerUpClick(type)} 
+                disabled={count === 0} 
+                style={{ ...s.puBtn, opacity: count > 0 ? 1 : 0.3 }}
+              >
+                <span style={s.puIcon}>
+                  {type === '50:50' ? '🌗' : type === 'freeze' ? '❄️' : '🐢'}
+                </span>
+                <span style={s.puCount}>x{count}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div style={s.questionCard}><h2 style={s.questionText}>{question.text}</h2></div>
@@ -229,8 +239,13 @@ const s: any = {
   clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '5px' },
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  powerUpsContainer: { display: 'flex', gap: '10px', justifyContent: 'flex-start', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '5px', height: '50px', width: '100%' },
-  puBtn: { flexShrink: 0, backgroundColor: 'rgba(255,145,0,0.1)', border: '1px solid #FF9100', borderRadius: '10px', color: '#FF9100', padding: '8px 12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' },
+  
+  // הוחלפו סגנונות הכוחות לאלו המדויקים של מסך הסולו
+  powerUpsRow: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px', flexShrink: 0 },
+  puBtn: { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'white' },
+  puIcon: { fontSize: '1rem' },
+  puCount: { fontSize: '0.8rem', fontWeight: 'bold' },
+
   questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
   questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
   optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
