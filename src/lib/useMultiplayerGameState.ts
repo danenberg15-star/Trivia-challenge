@@ -10,11 +10,13 @@ export function useMultiplayerGameState(roomId: string) {
   const [roomData, setRoomData] = useState<any>(null);
   const [step, setStep] = useState(3); 
 
+  // 1. שליפת ה-ID של המשתמש
   useEffect(() => {
     const savedId = localStorage.getItem('trivia_user_id') || '';
     setUserId(savedId);
   }, []);
 
+  // 2. האזנה אקטיבית ל-Firebase
   useEffect(() => {
     if (!roomId) return;
     const roomRef = ref(db, `rooms/${roomId}`);
@@ -29,15 +31,17 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher: מאזין לשינויים ומעביר לשלב התוצאות רק כשכולם באמת ענו ב-DB
+   * מנגנון ה-Watcher:
+   * מאזין לשינויים ב-roundResults. ברגע שכל הקבוצות ענו ב-Firebase,
+   * המנגנון מעביר את החדר כולו לשלב 6. זה פותר את בעיית התקיעה בחדר עומר.
    */
   useEffect(() => {
-    if (!roomData || roomData.step !== 5) return;
+    if (!roomData || roomData.step !== 5 || !roomId) return;
 
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
-    // בדיקה אם כל הקבוצות רשומות כ-answered
+    // בדיקה אם כל הקבוצות בחדר סיימו לענות (answered === true)
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished) {
@@ -52,6 +56,7 @@ export function useMultiplayerGameState(roomId: string) {
         isCheckpointNext: isCheckpoint
       };
 
+      // בדיקת ניצחון/הפסד גלובלית
       allTeams.forEach((name: string) => {
         if (roomData.timeBanks[name] >= 120) {
           updatePayload.step = 7;
@@ -86,7 +91,7 @@ export function useMultiplayerGameState(roomId: string) {
     const currentBankTime = roomData.timeBanks[teamName!] || 0;
     const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
     
-    // עדכון נתיבים ספציפיים כדי למנוע התנגשויות (Race Conditions)
+    // עדכון נתיבים ספציפיים (Atomic Updates) כדי למנוע דריסת נתונים בין שחקנים/בוטים
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
