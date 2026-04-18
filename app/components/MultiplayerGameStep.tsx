@@ -16,11 +16,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const myTeamName = roomData.teamNames[me.teamIdx];
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
   
-  // טיימר מקומי - הגדרת טיפוס למניעת שגיאות קומפילציה
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
-  
-  // תוספת: סטייט להשהיית קריאה של 2 שניות בתחילת כל שאלה
   const [isReadingDelay, setIsReadingDelay] = useState(true);
   
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
@@ -29,29 +26,40 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const isSlowMo = isEffectActive && currentEffect.type === 'slow-mo';
   const hiddenOptions = (isEffectActive && currentEffect.type === '50:50') ? currentEffect.hidden : [];
 
-  // סנכרון טיימר רק כשהשאלה משתנה - מונע קפיצות בזמן הצבעה
+  // תוספת: סטייט למדידת טיימר ההקפאה החי (במשחק הקבוצתי)
+  const [freezeCountdown, setFreezeCountdown] = useState(0);
+
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
-    setIsReadingDelay(true); // אתחול השהיית הקריאה בכל שאלה חדשה
+    setIsReadingDelay(true); 
   }, [roomData.currentQuestionIdx, myTeamName]); 
 
-  // לוגיקת השהיית הקריאה (2 שניות)
   useEffect(() => {
     if (!isReadingDelay) return;
-    const delayTimer = setTimeout(() => {
-      setIsReadingDelay(false);
-    }, 2000);
+    const delayTimer = setTimeout(() => setIsReadingDelay(false), 2000);
     return () => clearTimeout(delayTimer);
   }, [isReadingDelay, roomData.currentQuestionIdx]);
 
   useEffect(() => {
-    // השעון לא יורד אם יש השהיית קריאה, קפאון או כישלון
     if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay) return;
     const delay = isSlowMo ? 2000 : 1000;
     const t = setInterval(() => setTimeLeft((prev: number) => prev - 1), delay);
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay]);
+
+  // לוגיקת טיימר ההקפאה הענק
+  useEffect(() => {
+    let interval: any;
+    if (isFrozen && currentEffect.expiresAt) {
+      const calculateRemain = () => Math.max(0, Math.ceil((currentEffect.expiresAt - Date.now()) / 1000));
+      setFreezeCountdown(calculateRemain());
+      interval = setInterval(() => {
+        setFreezeCountdown(calculateRemain());
+      }, 500); // מתעדכן פעמיים בשנייה כדי להישאר מסונכרן בדיוק
+    }
+    return () => clearInterval(interval);
+  }, [isFrozen, currentEffect.expiresAt]);
 
   useEffect(() => {
     if (timeLeft <= 0 && !hasFailed) {
@@ -117,7 +125,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const roomDataRef = useRef(roomData);
   useEffect(() => { roomDataRef.current = roomData; }, [roomData]);
 
-  // לוגיקת בוטים משודרגת לחדר QA: רק הצבעה, ללא מעבר שלב אוטומטי
   useEffect(() => {
     if ((roomData.id === 'עומר' || roomData.id === 'qa_omer_room') && !isFrozen && !hasFailed) {
       const botTimer = setTimeout(() => {
@@ -149,7 +156,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const handleSubmit = () => {
     if (!allAgreed) return;
-    // שליחת אובייקט השאלה המלא ל-N+1 כדי למנוע טעויות תצוגה
     handleAnswer(firstVote === question.correctIdx, timeLeft, question);
   };
 
@@ -193,7 +199,13 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
         <div style={s.optionsGrid}>
           {isFrozen ? (
-            <div style={s.frozenBox}>❄️ הזמן קפא ל-10 שניות!</div>
+            <div style={s.frozenBox}>
+              <span style={{ fontSize: '2.5rem', marginBottom: '5px', display: 'block' }}>❄️</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#00E5FF', marginBottom: '10px', display: 'block' }}>זמן קפוא!</span>
+              <span style={{ fontSize: '7rem', fontWeight: '900', color: '#00E5FF', lineHeight: 1, textShadow: '0 0 20px rgba(0,229,255,0.8)', display: 'block' }}>
+                {freezeCountdown}
+              </span>
+            </div>
           ) : (
             question.options.map((opt: string, i: number) => {
               const votersForThis = myTeamPlayers.filter((p: any) => votes[p.id] === i);
@@ -238,39 +250,16 @@ const s: any = {
   clockContainer: { position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: '5px' },
   clockTime: { position: 'absolute', fontSize: '2.8rem', fontWeight: '900', color: 'white', fontFamily: 'monospace' },
   contentArea: { flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '600px', overflowY: 'auto', gap: '15px', padding: '10px 5px', boxSizing: 'border-box' },
-  
-  // העיצוב החדש והרחב (זהה למשחק האישי)
-  powerUpsRow: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    width: '100%',
-    gap: '10px', 
-    marginBottom: '10px', 
-    flexShrink: 0 
-  },
-  puBtn: { 
-    flex: 1, 
-    backgroundColor: 'rgba(255,255,255,0.05)', 
-    border: '1px solid rgba(255,255,255,0.1)', 
-    borderRadius: '15px', 
-    padding: '12px 5px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: '8px', 
-    cursor: 'pointer', 
-    color: 'white',
-    transition: 'all 0.2s ease'
-  },
+  powerUpsRow: { display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px', marginBottom: '10px', flexShrink: 0 },
+  puBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: '12px 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', color: 'white', transition: 'all 0.2s ease' },
   puIcon: { fontSize: '1.4rem' },
   puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
-
   questionCard: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid rgba(0,229,255,0.1)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
   questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
   optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
   optionBtn: { border: '2px solid', borderRadius: '15px', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' },
   optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
-  frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center' },
+  frozenBox: { backgroundColor: 'rgba(0, 229, 255, 0.05)', border: '2px dashed #00E5FF', borderRadius: '15px', padding: '25px', color: '#00E5FF', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' },
   votersContainer: { display: 'flex', gap: '5px' },
   voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { width: '100%', maxWidth: '600px', padding: '5px 0 10px 0', display: 'flex', flexDirection: 'column', gap: '10px' },
