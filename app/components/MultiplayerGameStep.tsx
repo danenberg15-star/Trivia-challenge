@@ -21,6 +21,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const [isReadingDelay, setIsReadingDelay] = useState(true);
   const [isLocked, setIsLocked] = useState(false); 
 
+  // חיווי על כוחות עזר פעילים
   const currentEffect = roomData.teamEffects?.[myTeamName] || {};
   const isEffectActive = currentEffect.qIdx === roomData.currentQuestionIdx;
   const isFrozen = isEffectActive && currentEffect.type === 'freeze' && Date.now() < currentEffect.expiresAt;
@@ -29,6 +30,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
+  // Ref לניהול מענה בוטים - מונע כפילויות ומאפשר סנכרון רב-קבוצתי
   const botHandledRef = useRef<number>(-1);
   const roomDataRef = useRef(roomData);
   
@@ -36,6 +38,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     roomDataRef.current = roomData;
   }, [roomData]);
 
+  // אתחול שאלה חדשה
   useEffect(() => {
     setTimeLeft(roomData.timeBanks[myTeamName] || 15);
     setHasFailed(false);
@@ -43,12 +46,14 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     setIsLocked(false);
   }, [roomData.currentQuestionIdx, myTeamName]); 
 
+  // השהיית קריאה (2 שניות)
   useEffect(() => {
     if (!isReadingDelay) return;
     const delayTimer = setTimeout(() => setIsReadingDelay(false), 2000);
     return () => clearTimeout(delayTimer);
   }, [isReadingDelay, roomData.currentQuestionIdx]);
 
+  // ניהול טיימר מקומי
   useEffect(() => {
     if (timeLeft <= 0 || isFrozen || hasFailed || isReadingDelay || isLocked) return;
     const delay = isSlowMo ? 2000 : 1000;
@@ -56,6 +61,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return () => clearInterval(t);
   }, [timeLeft, isFrozen, isSlowMo, hasFailed, isReadingDelay, isLocked]);
 
+  // לוגיקת בחירת שאלה ליניארית (1-2 רמה 1, 3-4 רמה 2, 5+ רמה 3+4)
   const question = useMemo(() => {
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
@@ -77,6 +83,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     return filteredPool[finalIdx];
   }, [roomData.currentQuestionIdx, roomData.askedQuestions, roomData.seed]);
 
+  // ניהול ספירה לאחור של הקפאה
   useEffect(() => {
     let interval: any;
     if (isFrozen && currentEffect.expiresAt) {
@@ -88,7 +95,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים משופרת לריבוי קבוצות (חדר עומר)
+   * לוגיקת בוטים משופרת לריבוי קבוצות (חדר עומר):
+   * המערכת סורקת את כל הקבוצות. כל קבוצה שאין בה שחקן אנושי תענה אוטומטית.
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -115,19 +123,21 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
+          // הצבעת בוטים
           teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
           
-          // סיום סבב עבור כל קבוצת בוטים בנפרד
+          // שליחת תשובה לכל קבוצת בוטים בנפרד (נועל את הקבוצה ב-DB)
           handleAnswer(shouldBeCorrect, 15, question, teamName);
         });
         
         updateRoom({ votes: newVotes });
-      }, 3000); 
+      }, 3000); // 3 שניות מענה + 2 שניות השהיית קריאה = 5 שניות
 
       return () => clearTimeout(timer);
     }
   }, [roomData.currentQuestionIdx, isReadingDelay, question, roomData.id, handleAnswer, updateRoom]);
 
+  // לוגיקת קונצנזוס (נעילה אוטומטית)
   const votes = roomData.votes || {};
   const myTeamVotes = myTeamPlayers.map((p: any) => votes[p.id]);
   const allVoted = myTeamVotes.every((v: any) => v !== undefined);
@@ -141,6 +151,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     }
   }, [allAgreed, isLocked, isReadingDelay, firstVote, question, timeLeft, handleAnswer]);
 
+  // טיפול בפסילת זמן
   useEffect(() => {
     if (timeLeft <= 0 && !hasFailed && !isLocked) {
       setHasFailed(true);
@@ -173,12 +184,14 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   const handleVote = (optIdx: number) => {
     if (isFrozen || hasFailed || isLocked) return; 
     let newVotes = { ...(roomData.votes || {}), [userId]: optIdx };
+    // בחדר עומר הבוטים שבקבוצה שלי (אם יש) מצביעים איתי
     if (roomData.id === 'עומר' || roomData.id === 'qa_omer_room') {
       myTeamPlayers.forEach((p: any) => { if (p.isBot) newVotes[p.id] = optIdx; });
     }
     updateRoom({ votes: newVotes });
   };
 
+  // עיצוב השעון
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(Math.max(timeLeft / 120, 0), 1);
@@ -195,37 +208,22 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         }
       `}</style>
 
+      {/* אזור השעון */}
       <div style={s.clockContainer}>
         <svg width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
           <circle 
-            cx="60" 
-            cy="60" 
-            r={radius} 
-            fill="none" 
-            stroke="rgba(255,255,255,0.05)" 
-            strokeWidth="8" 
-          />
-          <circle 
-            cx="60" 
-            cy="60" 
-            r={radius} 
-            fill="none" 
-            stroke={clockColor} 
-            strokeWidth="8" 
-            strokeDasharray={circumference} 
-            strokeDashoffset={strokeDashoffset} 
-            strokeLinecap="round" 
-            transform="rotate(-90 60 60)" 
-            style={{ 
-              transition: 'stroke-dashoffset 1s linear', 
-              filter: `drop-shadow(0 0 5px ${clockColor})` 
-            }} 
+            cx="60" cy="60" r={radius} fill="none" stroke={clockColor} strokeWidth="8" 
+            strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} 
+            strokeLinecap="round" transform="rotate(-90 60 60)" 
+            style={{ transition: 'stroke-dashoffset 1s linear', filter: `drop-shadow(0 0 5px ${clockColor})` }} 
           />
         </svg>
         <div style={s.clockTime}>{timeLeft}</div>
       </div>
 
       <div style={s.contentArea}>
+        {/* שורת כוחות עזר */}
         <div style={s.powerUpsRow}>
           {['50:50', 'freeze', 'slow-mo'].map(type => {
             const count = (roomData.powerUps?.[myTeamName] || []).filter((p: string) => p === type).length;
@@ -253,10 +251,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           })}
         </div>
 
+        {/* כרטיס שאלה */}
         <div style={s.questionCard}>
           <h2 style={s.questionText}>{question.text}</h2>
         </div>
 
+        {/* גריד תשובות */}
         <div style={s.optionsGrid}>
           {isFrozen ? (
             <div style={s.frozenBox}>
@@ -284,24 +284,12 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
                 <div 
                   key={i} 
                   onClick={() => handleVote(i)} 
-                  style={{ 
-                    ...s.optionBtn, 
-                    borderColor, 
-                    backgroundColor: bgColor, 
-                    cursor: isLocked ? 'default' : 'pointer' 
-                  }}
+                  style={{ ...s.optionBtn, borderColor, backgroundColor: bgColor, cursor: isLocked ? 'default' : 'pointer' }}
                 >
                   <span style={s.optionText}>{opt}</span>
                   <div style={s.votersContainer}>
                     {votersForThis.map((p: any) => (
-                      <div 
-                        key={p.id} 
-                        style={{ 
-                          ...s.voterDot, 
-                          backgroundColor: p.color, 
-                          boxShadow: `0 0 5px ${p.color}` 
-                        }} 
-                      />
+                      <div key={p.id} style={{ ...s.voterDot, backgroundColor: p.color, boxShadow: `0 0 5px ${p.color}` }} />
                     ))}
                   </div>
                 </div>
@@ -311,6 +299,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         </div>
       </div>
 
+      {/* פוטר סטטוס */}
       <div style={s.footer}>
         <div style={s.rosterContainer}>
           <div style={s.rosterLabel}>סטטוס קבוצה:</div>
@@ -325,6 +314,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           </div>
         </div>
         
+        {/* חיווי נעילה במקום כפתור ידני */}
         <div style={isLocked ? s.lockBadgeActive : s.lockBadgePending}>
           {isLocked ? "ננעלנו! ממתינים לשאר הקבוצות... ⏳" : "מנסים להגיע להסכמה..."}
         </div>
@@ -395,13 +385,8 @@ const s: any = {
     color: 'white', 
     transition: 'all 0.3s ease' 
   },
-  puIcon: { 
-    fontSize: '1.4rem' 
-  },
-  puCount: { 
-    fontSize: '1.1rem', 
-    fontWeight: 'bold' 
-  },
+  puIcon: { fontSize: '1.4rem' },
+  puCount: { fontSize: '1.1rem', fontWeight: 'bold' },
   questionCard: { 
     backgroundColor: 'rgba(255,255,255,0.02)', 
     borderRadius: '20px', 
@@ -410,17 +395,8 @@ const s: any = {
     border: '1px solid rgba(0,229,255,0.1)', 
     boxShadow: '0 4px 15px rgba(0,0,0,0.2)' 
   },
-  questionText: { 
-    fontSize: '1.3rem', 
-    fontWeight: 'bold', 
-    color: '#FF9100', 
-    lineHeight: '1.4' 
-  },
-  optionsGrid: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '10px' 
-  },
+  questionText: { fontSize: '1.3rem', fontWeight: 'bold', color: '#FF9100', lineHeight: '1.4' },
+  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '10px' },
   optionBtn: { 
     border: '2px solid', 
     borderRadius: '15px', 
@@ -431,10 +407,7 @@ const s: any = {
     transition: 'all 0.2s',
     minHeight: '60px'
   },
-  optionText: { 
-    fontSize: '1.1rem', 
-    fontWeight: 'bold' 
-  },
+  optionText: { fontSize: '1.1rem', fontWeight: 'bold' },
   frozenBox: { 
     backgroundColor: 'rgba(0, 229, 255, 0.05)', 
     border: '2px dashed #00E5FF', 
@@ -447,16 +420,8 @@ const s: any = {
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  votersContainer: { 
-    display: 'flex', 
-    gap: '5px' 
-  },
-  voterDot: { 
-    width: '12px', 
-    height: '12px', 
-    borderRadius: '50%', 
-    border: '1px solid white' 
-  },
+  votersContainer: { display: 'flex', gap: '5px' },
+  voterDot: { width: '12px', height: '12px', borderRadius: '50%', border: '1px solid white' },
   footer: { 
     width: '100%', 
     maxWidth: '600px', 
@@ -471,17 +436,8 @@ const s: any = {
     padding: '10px', 
     border: '1px solid rgba(255,255,255,0.05)' 
   },
-  rosterLabel: { 
-    fontSize: '0.85rem', 
-    color: '#FF9100', 
-    fontWeight: 'bold', 
-    marginBottom: '8px' 
-  },
-  rosterGrid: { 
-    display: 'flex', 
-    flexWrap: 'wrap', 
-    gap: '10px' 
-  },
+  rosterLabel: { fontSize: '0.85rem', color: '#FF9100', fontWeight: 'bold', marginBottom: '8px' },
+  rosterGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px' },
   rosterItem: { 
     display: 'flex', 
     alignItems: 'center', 
@@ -491,17 +447,9 @@ const s: any = {
     borderRadius: '8px', 
     fontSize: '0.9rem' 
   },
-  rosterDot: { 
-    width: '10px', 
-    height: '10px', 
-    borderRadius: '50%' 
-  },
-  rosterName: { 
-    color: 'white' 
-  },
-  rosterStatus: { 
-    marginLeft: '5px' 
-  },
+  rosterDot: { width: '10px', height: '10px', borderRadius: '50%' },
+  rosterName: { color: 'white' },
+  rosterStatus: { marginLeft: '5px' },
   lockBadgeActive: { 
     width: '100%', 
     padding: '18px', 
