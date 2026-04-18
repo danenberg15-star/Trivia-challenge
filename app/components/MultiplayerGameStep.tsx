@@ -29,8 +29,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   
-  // שימוש ב-Ref כדי למנוע מהבוטים להתאפס כשהשעון שלך רץ
-  const botHandledForIdx = useRef<number>(-1);
+  // Ref לניהול מענה בוטים - מונע כפילויות ומאפשר סנכרון רב-קבוצתי
+  const botHandledRef = useRef<number>(-1);
   const roomDataRef = useRef(roomData);
   
   useEffect(() => {
@@ -89,31 +89,25 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים חסינה (חדר עומר)
+   * לוגיקת בוטים חסינה (חדר עומר):
    * מטפלת ב-2 קבוצות, 3 קבוצות וכל שילוב אחר.
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
     const roomName = (roomData.id || "").toString().trim();
-    // זיהוי רחב של כל וריאציות חדר עומר
     const isQA = ["עומר", "qa_omer_room", "עומר Q", "עומר q"].includes(roomName);
 
-    if (isQA && !isReadingDelay && botHandledForIdx.current !== currentQ) {
-      const botTimer = setTimeout(() => {
-        // שימוש ב-Ref כדי לקבל את המצב הכי עדכני מבלי להפעיל את ה-Effect מחדש
+    if (isQA && !isReadingDelay && botHandledRef.current !== currentQ) {
+      const timer = setTimeout(() => {
         const latestRoom = roomDataRef.current;
-        if (latestRoom.step !== 5 || botHandledForIdx.current === currentQ) return;
+        if (latestRoom.step !== 5 || botHandledRef.current === currentQ) return;
         
-        botHandledForIdx.current = currentQ;
-        
+        botHandledRef.current = currentQ;
         const shouldBeCorrect = (currentQ % 2 === 0);
         const botChoice = shouldBeCorrect ? question.correctIdx : (question.correctIdx + 1) % 4;
         
-        // מציאת כל האינדקסים של הקבוצות בחדר
         const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
-        // מציאת קבוצות שיש בהן לפחות שחקן אנושי אחד
         const humanTeamIndices = Array.from(new Set(latestRoom.players.filter((p: any) => !p.isBot).map((p: any) => p.teamIdx)));
-        // כל קבוצה שאין בה אנושיים - המערכת תענה עבורה
         const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => !humanTeamIndices.includes(idx));
 
         let newVotes = { ...(latestRoom.votes || {}) };
@@ -122,19 +116,15 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
           const teamName = latestRoom.teamNames[tIdx];
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx && p.isBot);
           
-          // רישום הצבעות הבוטים
-          teamBots.forEach((p: any) => {
-            newVotes[p.id] = botChoice;
-          });
+          teamBots.forEach((p: any) => { newVotes[p.id] = botChoice; });
           
-          // שליחת תשובה ל-Firebase עבור הקבוצה
           handleAnswer(shouldBeCorrect, 15, question, teamName);
         });
         
         updateRoom({ votes: newVotes });
       }, 3000); 
 
-      return () => clearTimeout(botTimer);
+      return () => clearTimeout(timer);
     }
   }, [roomData.currentQuestionIdx, isReadingDelay, question, roomData.id, handleAnswer, updateRoom]);
 
