@@ -34,10 +34,12 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     setDisplayTimes(initialTimes);
     hasInitialized.current = true;
 
-    // 2. השמעת סאונד - Cheer אם מישהו צדק, Boo אם כולם טעו
-    const anyoneCorrect = Object.values(roundResults).some((r: any) => r.isCorrect);
+    // 2. השמעת סאונד ספציפי לקבוצה המקומית בלבד
+    const myTeamResult = roundResults[myTeamName];
+    const isMyTeamCorrect = myTeamResult ? myTeamResult.isCorrect : false;
+
     if (typeof Audio !== "undefined") {
-      audioRef.current = new Audio(anyoneCorrect ? '/Cheer.m4a' : '/Boo.m4a');
+      audioRef.current = new Audio(isMyTeamCorrect ? '/Cheer.m4a' : '/Boo.m4a');
       audioRef.current.volume = 0.5;
       audioRef.current.play().catch(() => {});
     }
@@ -49,7 +51,7 @@ export default function MultiplayerScoreStep({ roomData, userId, updateRoom, onN
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [roomData.timeBanks, roundResults, teamNames]);
+  }, [roomData.timeBanks, roundResults, teamNames, myTeamName]);
 
   /**
    * תיקון לריבוי קבוצות בחדר עומר:
