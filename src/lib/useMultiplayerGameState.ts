@@ -79,17 +79,35 @@ export function useMultiplayerGameState(roomId: string) {
         updatePayload.lastGrantedPowerUp = randomPU;
       }
 
+      // --- לוגיקת הניצחון וההישרדות החדשה ---
+      const aliveTeams = allTeams.filter((name: string) => (roomData.timeBanks[name] || 0) > 0);
+      let winner = null;
+      let isGameOver = false;
+
+      // 1. תנאי ניצחון ראשון: מישהו הגיע ל-120 שניות
       allTeams.forEach((name: string) => {
-        if (roomData.timeBanks[name] >= 120) {
-          updatePayload.step = 7;
-          updatePayload.winnerName = name;
+        if ((roomData.timeBanks[name] || 0) >= 120) {
+          winner = name;
         }
       });
 
-      const anyTimeLeft = allTeams.some((name: string) => roomData.timeBanks[name] > 0);
-      if (!anyTimeLeft) {
+      // 2. תנאי ניצחון שני (השורד האחרון): נשארה רק קבוצה אחת חיה (ובמשחק התחילו יותר מקבוצה אחת)
+      if (!winner && aliveTeams.length === 1 && allTeams.length > 1) {
+        winner = aliveTeams[0];
+      }
+
+      // 3. תנאי הפסד כולל: כל הקבוצות הגיעו ל-0
+      if (aliveTeams.length === 0) {
+        isGameOver = true;
+      }
+
+      // החלת תוצאות הסיום אם יש
+      if (isGameOver) {
         updatePayload.step = 9;
         updatePayload.winnerName = "Game Over";
+      } else if (winner) {
+        updatePayload.step = 7;
+        updatePayload.winnerName = winner;
       }
 
       update(ref(db, `rooms/${roomId}`), updatePayload).catch(console.error);
@@ -127,12 +145,22 @@ export function useMultiplayerGameState(roomId: string) {
     }
     
     const currentBankTime = data.timeBanks?.[teamName!] || 0;
-    const newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
+    
+    // מניעת "תחיית המתים": אם אתה על 0 שניות, אתה נשאר שם
+    let newTime = currentBankTime;
+    let finalIsCorrect = isCorrect;
+
+    if (currentBankTime > 0) {
+      newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
+    } else {
+      newTime = 0;
+      finalIsCorrect = false; 
+    }
     
     const updates: any = {};
     updates[`timeBanks/${teamName}`] = newTime;
     updates[`roundResults/${teamName}`] = {
-      isCorrect,
+      isCorrect: finalIsCorrect,
       finalTime: newTime,
       answered: true
     };

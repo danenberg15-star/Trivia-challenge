@@ -62,7 +62,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
 
-    // חלוקת הקושי המעודכנת
     if (qIdx < 2) {
       pool = ALL_QUESTIONS.filter(q => q.level === 1);
     } else if (qIdx < 4) {
@@ -98,7 +97,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת הבוטים - יציבה, אנושית ומתחלפת!
+   * לוגיקת בוטים מודעת-הדחה
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -128,24 +127,35 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       botOnlyTeamIndices.forEach((tIdx: number) => {
         const teamName = latestRoom.teamNames[tIdx];
-        const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx);
+        const currentBankTime = latestRoom.timeBanks?.[teamName] ?? 15;
         
-        const shouldBeCorrect = ((currentQ + tIdx) % 2 === 0);
-        const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
-        
-        teamBots.forEach((p: any) => { 
-          botUpdates[`votes/${p.id}`] = botChoice; 
-        });
-        
-        const currentBankTime = latestRoom.timeBanks?.[teamName] || 0;
-        const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
-        
-        botUpdates[`timeBanks/${teamName}`] = newTime;
-        botUpdates[`roundResults/${teamName}`] = {
-          isCorrect: shouldBeCorrect,
-          finalTime: newTime,
-          answered: true
-        };
+        // אם הבוט מודח (זמן אפס) - הוא רק מסמן שענה כדי לא לתקוע, אבל נשאר עם אפס!
+        if (currentBankTime <= 0) {
+          botUpdates[`timeBanks/${teamName}`] = 0;
+          botUpdates[`roundResults/${teamName}`] = {
+            isCorrect: false,
+            finalTime: 0,
+            answered: true
+          };
+        } else {
+          // בוט שעדיין משחק מצביע כרגיל
+          const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx);
+          const shouldBeCorrect = ((currentQ + tIdx) % 2 === 0);
+          const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
+          
+          teamBots.forEach((p: any) => { 
+            botUpdates[`votes/${p.id}`] = botChoice; 
+          });
+          
+          const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
+          
+          botUpdates[`timeBanks/${teamName}`] = newTime;
+          botUpdates[`roundResults/${teamName}`] = {
+            isCorrect: shouldBeCorrect,
+            finalTime: newTime,
+            answered: true
+          };
+        }
       });
       
       botUpdates[`lastQuestion`] = latestQ;
@@ -160,7 +170,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     }
   }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked]); 
 
-  // ============== מנגנון חילוץ חסין - מתעלם מבוטים! ==============
+  // ============== מנגנון חילוץ חסין ==============
   useEffect(() => {
     if ((isLocked || timeLeft <= 0) && !isReadingDelay) {
       const rescueTimer = setTimeout(() => {
@@ -178,7 +188,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         if (localTeamName && (!results[localTeamName] || results[localTeamName].answered !== true)) {
           neededRescue = true;
           const currentBank = latestRoom.timeBanks?.[localTeamName] || 0;
-          const penaltyTime = Math.max(0, currentBank - 7);
+          // אם הקבוצה האנושית כבר הודחה, היא נשארת על 0 ולא חוטפת מינוס נוסף
+          const penaltyTime = currentBank > 0 ? Math.max(0, currentBank - 7) : 0;
 
           emergencyUpdates[`timeBanks/${localTeamName}`] = penaltyTime;
           emergencyUpdates[`roundResults/${localTeamName}`] = {
