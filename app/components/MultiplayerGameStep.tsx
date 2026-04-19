@@ -62,12 +62,15 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     const qIdx = roomData.currentQuestionIdx || 0;
     let pool: QuestionType[] = [];
 
+    // חלוקת הקושי המעודכנת
     if (qIdx < 2) {
       pool = ALL_QUESTIONS.filter(q => q.level === 1);
     } else if (qIdx < 4) {
       pool = ALL_QUESTIONS.filter(q => q.level === 2);
+    } else if (qIdx < 7) {
+      pool = ALL_QUESTIONS.filter(q => q.level === 3);
     } else {
-      pool = ALL_QUESTIONS.filter(q => q.level === 3 || q.level === 4);
+      pool = ALL_QUESTIONS.filter(q => q.level === 4);
     }
 
     const askedTexts = roomData.askedQuestions || [];
@@ -117,7 +120,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       const allTeamIndices = latestRoom.teamNames.map((_: any, i: number) => i);
       const myTeamIdx = latestRoom.players.find((p: any) => p.id === userId)?.teamIdx;
       
-      // הבוטים הם כל קבוצה שאינה הקבוצה שלך
       const botOnlyTeamIndices = allTeamIndices.filter((idx: number) => idx !== myTeamIdx);
 
       if (botOnlyTeamIndices.length === 0) return;
@@ -128,7 +130,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         const teamName = latestRoom.teamNames[tIdx];
         const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx);
         
-        // הלוגיקה החדשה: קבוצה אחת תצדק וקבוצה אחת תטעה, וזה מתחלף כל שאלה!
         const shouldBeCorrect = ((currentQ + tIdx) % 2 === 0);
         const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
         
@@ -152,10 +153,8 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
     };
 
     if (isLocked) {
-      // אם המשתמש נעל תשובה מהר - הבוטים מגיבים אליו מיד
       executeBots();
     } else {
-      // אם המשתמש מתעכב - הבוטים יענו עצמאית אחרי 5 שניות בלי קשר לשעון!
       const timer = setTimeout(executeBots, 5000); 
       return () => clearTimeout(timer);
     }
@@ -176,7 +175,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
         let emergencyUpdates: any = {};
         let neededRescue = false;
 
-        // חילוץ ובדיקה אך ורק לקבוצה של השחקן האמיתי - אין סיכוי להעניש בוטים בטעות
         if (localTeamName && (!results[localTeamName] || results[localTeamName].answered !== true)) {
           neededRescue = true;
           const currentBank = latestRoom.timeBanks?.[localTeamName] || 0;
