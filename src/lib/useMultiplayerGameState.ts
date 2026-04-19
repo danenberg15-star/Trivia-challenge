@@ -33,7 +33,7 @@ export function useMultiplayerGameState(roomId: string) {
   }, [roomId]);
 
   /**
-   * Watcher 1: מעבר לשלב התוצאות והענקת כוחות
+   * Watcher 1: מעבר לשלב התוצאות
    */
   useEffect(() => {
     if (!roomData || !roomId) return;
@@ -46,7 +46,6 @@ export function useMultiplayerGameState(roomId: string) {
     const allTeams = roomData.teamNames || [];
     const results = roomData.roundResults || {};
     
-    // מוודא שכל הקבוצות בחדר סיימו לענות באופן תקין
     const allFinished = allTeams.length > 0 && allTeams.every((name: string) => results[name]?.answered === true);
 
     if (allFinished && !isChangingStepRef.current) {
@@ -79,29 +78,24 @@ export function useMultiplayerGameState(roomId: string) {
         updatePayload.lastGrantedPowerUp = randomPU;
       }
 
-      // --- לוגיקת הניצחון וההישרדות החדשה ---
       const aliveTeams = allTeams.filter((name: string) => (roomData.timeBanks[name] || 0) > 0);
       let winner = null;
       let isGameOver = false;
 
-      // 1. תנאי ניצחון ראשון: מישהו הגיע ל-120 שניות
       allTeams.forEach((name: string) => {
         if ((roomData.timeBanks[name] || 0) >= 120) {
           winner = name;
         }
       });
 
-      // 2. תנאי ניצחון שני (השורד האחרון): נשארה רק קבוצה אחת חיה (ובמשחק התחילו יותר מקבוצה אחת)
       if (!winner && aliveTeams.length === 1 && allTeams.length > 1) {
         winner = aliveTeams[0];
       }
 
-      // 3. תנאי הפסד כולל: כל הקבוצות הגיעו ל-0
       if (aliveTeams.length === 0) {
         isGameOver = true;
       }
 
-      // החלת תוצאות הסיום אם יש
       if (isGameOver) {
         updatePayload.step = 9;
         updatePayload.winnerName = "Game Over";
@@ -144,14 +138,12 @@ export function useMultiplayerGameState(roomId: string) {
       teamName = data.teamNames[me.teamIdx];
     }
     
-    const currentBankTime = data.timeBanks?.[teamName!] || 0;
-    
-    // מניעת "תחיית המתים": אם אתה על 0 שניות, אתה נשאר שם
-    let newTime = currentBankTime;
+    // התיקון: מתבססים על הזמן המדויק שנשאר (timeAtAnswer) ולא על זמן הבנק מתחילת התור
+    let newTime = timeAtAnswer;
     let finalIsCorrect = isCorrect;
 
-    if (currentBankTime > 0) {
-      newTime = Math.max(0, currentBankTime + (isCorrect ? 10 : -7));
+    if (timeAtAnswer > 0) {
+      newTime = Math.max(0, timeAtAnswer + (isCorrect ? 10 : -7));
     } else {
       newTime = 0;
       finalIsCorrect = false; 

@@ -97,7 +97,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת בוטים מודעת-הדחה
+   * לוגיקת הבוטים
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -127,10 +127,14 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
       botOnlyTeamIndices.forEach((tIdx: number) => {
         const teamName = latestRoom.teamNames[tIdx];
-        const currentBankTime = latestRoom.timeBanks?.[teamName] ?? 15;
         
-        // אם הבוט מודח (זמן אפס) - הוא רק מסמן שענה כדי לא לתקוע, אבל נשאר עם אפס!
-        if (currentBankTime <= 0) {
+        // חישוב הזמן האמיתי של הבוט ברגע המענה (גם הוא מאבד זמן!)
+        const myInitialTime = latestRoom.timeBanks?.[myTeamName] || 15;
+        const elapsedTime = Math.max(0, myInitialTime - timeLeft);
+        const currentBankTime = latestRoom.timeBanks?.[teamName] || 15;
+        const botTimeAtAnswer = Math.max(0, currentBankTime - elapsedTime);
+        
+        if (botTimeAtAnswer <= 0) {
           botUpdates[`timeBanks/${teamName}`] = 0;
           botUpdates[`roundResults/${teamName}`] = {
             isCorrect: false,
@@ -138,7 +142,6 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
             answered: true
           };
         } else {
-          // בוט שעדיין משחק מצביע כרגיל
           const teamBots = latestRoom.players.filter((p: any) => p.teamIdx === tIdx);
           const shouldBeCorrect = ((currentQ + tIdx) % 2 === 0);
           const botChoice = shouldBeCorrect ? latestQ.correctIdx : (latestQ.correctIdx + 1) % 4;
@@ -147,7 +150,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
             botUpdates[`votes/${p.id}`] = botChoice; 
           });
           
-          const newTime = Math.max(0, currentBankTime + (shouldBeCorrect ? 10 : -7));
+          const newTime = Math.max(0, botTimeAtAnswer + (shouldBeCorrect ? 10 : -7));
           
           botUpdates[`timeBanks/${teamName}`] = newTime;
           botUpdates[`roundResults/${teamName}`] = {
@@ -168,7 +171,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
       const timer = setTimeout(executeBots, 5000); 
       return () => clearTimeout(timer);
     }
-  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked]); 
+  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked, timeLeft, myTeamName, userId]); 
 
   // ============== מנגנון חילוץ חסין ==============
   useEffect(() => {
@@ -187,14 +190,11 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
 
         if (localTeamName && (!results[localTeamName] || results[localTeamName].answered !== true)) {
           neededRescue = true;
-          const currentBank = latestRoom.timeBanks?.[localTeamName] || 0;
-          // אם הקבוצה האנושית כבר הודחה, היא נשארת על 0 ולא חוטפת מינוס נוסף
-          const penaltyTime = currentBank > 0 ? Math.max(0, currentBank - 7) : 0;
-
-          emergencyUpdates[`timeBanks/${localTeamName}`] = penaltyTime;
+          // אם הזמן נגמר, הערך הוא 0 (מונע באג של ירידת זמן התחלתית שגויה)
+          emergencyUpdates[`timeBanks/${localTeamName}`] = 0;
           emergencyUpdates[`roundResults/${localTeamName}`] = {
             isCorrect: false,
-            finalTime: penaltyTime,
+            finalTime: 0,
             answered: true
           };
         }
@@ -218,6 +218,7 @@ export default function MultiplayerGameStep({ roomData, userId, updateRoom, hand
   useEffect(() => {
     if (allAgreed && !isLocked && !isReadingDelay) {
       setIsLocked(true);
+      // עובר עם הזמן המדויק שנשאר בשעון (timeLeft)
       handleAnswer(firstVote === question.correctIdx, timeLeft, question);
     }
   }, [allAgreed, isLocked, isReadingDelay, firstVote, question, timeLeft, handleAnswer]);
