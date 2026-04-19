@@ -14,6 +14,9 @@ export function useMultiplayerStepLogic({ roomData, userId, updateRoom, handleAn
   const me = roomData.players.find((p: any) => p.id === userId);
   const myTeamName = roomData.teamNames[me.teamIdx];
   const myTeamPlayers = roomData.players.filter((p: any) => p.teamIdx === me.teamIdx);
+
+  // הזיכרון המצולם: שומר את הזמן האמיתי של תחילת השאלה
+  const initialTimeRef = useRef<number>(15);
   
   const [timeLeft, setTimeLeft] = useState<number>(roomData.timeBanks[myTeamName] || 15);
   const [hasFailed, setHasFailed] = useState(false);
@@ -38,7 +41,9 @@ export function useMultiplayerStepLogic({ roomData, userId, updateRoom, handleAn
   }, [roomData, handleAnswer, updateRoom]);
 
   useEffect(() => {
-    setTimeLeft(roomData.timeBanks[myTeamName] || 15);
+    // מצלם את הזמן ההתחלתי. לא מושפע מעדכוני שרת בהמשך השאלה!
+    initialTimeRef.current = roomData.timeBanks[myTeamName] || 15;
+    setTimeLeft(initialTimeRef.current);
     setHasFailed(false);
     setIsReadingDelay(true); 
     setIsLocked(false);
@@ -96,7 +101,7 @@ export function useMultiplayerStepLogic({ roomData, userId, updateRoom, handleAn
   }, [isFrozen, currentEffect.expiresAt]);
 
   /**
-   * לוגיקת הבוטים
+   * לוגיקת הבוטים - יציבה ומונעת הדחה שגויה
    */
   useEffect(() => {
     const currentQ = roomData.currentQuestionIdx || 0;
@@ -127,8 +132,8 @@ export function useMultiplayerStepLogic({ roomData, userId, updateRoom, handleAn
       botOnlyTeamIndices.forEach((tIdx: number) => {
         const teamName = latestRoom.teamNames[tIdx];
         
-        const myInitialTime = latestRoom.timeBanks?.[myTeamName] || 15;
-        const elapsedTime = Math.max(0, myInitialTime - timeLeft);
+        // חישוב מוגן של הזמן שעבר, מסתמך על הזיכרון המצולם ולא על השרת המשתנה
+        const elapsedTime = Math.max(0, initialTimeRef.current - timeLeft);
         const currentBankTime = latestRoom.timeBanks?.[teamName] || 15;
         const botTimeAtAnswer = Math.max(0, currentBankTime - elapsedTime);
         
@@ -169,7 +174,7 @@ export function useMultiplayerStepLogic({ roomData, userId, updateRoom, handleAn
       const timer = setTimeout(executeBots, 5000); 
       return () => clearTimeout(timer);
     }
-  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked, timeLeft, myTeamName, userId]); 
+  }, [isReadingDelay, roomData.currentQuestionIdx, roomData.id, isLocked, timeLeft, userId]); 
 
   // ============== מנגנון חילוץ חסין ==============
   useEffect(() => {
